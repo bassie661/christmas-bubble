@@ -24,6 +24,10 @@ Light snow falls on two controls in a quiet dashboard scene. The dimmer is off a
 
 <img src="previews/dim.gif" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
 
+**Twilight edge.** The light stays at 45% while the edge of the blue slider changes from sharp (0) to soft (6) to its widest blend (10). [Adjust the twilight edge](#twilight-edge)
+
+<img src="previews/twilight-edge.gif" width="374" alt="Christmas light held at 45% brightness, with the twilight edge shown at 0, 6 and 10 out of 10">
+
 **A clear night.** A single star catches the eye for a moment above the cottage.
 
 <img src="previews/twinkle-en.gif" width="374" alt="A gold star twinkles above a cottage on a switched-off button">
@@ -56,6 +60,24 @@ A stronger gust bends the trees, pulls the smoke into wisps and drives snow agai
 3. Under **Settings → Dashboards**, open the three-dot menu and choose **Resources**. Enable Advanced Mode in your user profile if necessary. Add `/local/dashboard-christmas-snow.js` as a **JavaScript module**. For dashboards that manage resources in YAML, add the same URL with `type: module` to your existing Lovelace resources. [Registering dashboard resources](https://contributors.home-assistant.io/frontend/custom-ui/resources/)
 4. Edit your dashboard and choose **Add card → Manual**. Paste [light-slider.yaml](examples/light-slider.yaml) or [switch.yaml](examples/switch.yaml). Replace the example’s `entity:` value with your own light or switch, then save and reload.
 5. To add another button, repeat step 4 with another entity. If you’d like both examples together, paste [dashboard.yaml](dashboard.yaml) into a single Manual card and change the two entity IDs.
+
+## Twilight edge
+
+The blue fill can fade into the sky as you drag the dimmer. The edge narrows near either end of the track so the fill reaches 0% and 100% cleanly.
+
+In the [light slider YAML](examples/light-slider.yaml), set `christmas_twilight` at the same level as `entity`. Choose **0** for the ordinary sharp edge, **6** for the default, or **10** for the widest blend. Values in between adjust the width.
+
+```yaml
+christmas_twilight: 6
+```
+
+To adjust the width from Home Assistant, create a **Number** helper under **Settings → Devices & services → Helpers**. Choose **Slider**, set the minimum to **0**, maximum to **10** and step to **1**. Set its value to **6** to start. Then use your helper’s entity ID as the setting in the card.
+
+```yaml
+christmas_twilight: input_number.christmas_twilight
+```
+
+You can point several dimmers at the same helper or give each one its own setting. If you already have a Christmas Bubble slider, copy the updated `styles:` block from the light slider example into your card as well.
 
 ## Wind direction
 

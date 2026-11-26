@@ -9,6 +9,7 @@ show_state: false
 use_accent_color: true
 allow_light_slider_to_0: true
 slider_live_update: false
+christmas_twilight: 6
 hold_action:
   action: more-info
 sub_button:
@@ -20,6 +21,18 @@ sub_button:
       tap_action:
         action: more-info
 styles: |
+  .bubble-range-fill::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: var(--christmas-dusk-width, 0px);
+    transform: translateX(-50%);
+    --dusk-mid: color-mix(in srgb, #829bd9 36%, var(--bubble-main-background-color, var(--secondary-background-color, #282828)));
+    background: linear-gradient(to right, transparent, var(--dusk-mid) 49%, var(--dusk-mid) 51%, transparent);
+  }
   .bubble-button-card-container { clip-path: inset(0 round 999px); }
   dashboard-christmas-snow { position: absolute; inset: 0; display: block; z-index: 1; pointer-events: none; }
   .bubble-name-container, .bubble-icon-container, .bubble-sub-button-container { z-index: 2; }
@@ -41,5 +54,25 @@ styles: |
     const badge = box.querySelector(".bubble-sub-button-1");
     const percent = level === "" ? "—" : level + "%";
     if (badge && badge.dataset.percent !== percent) badge.dataset.percent = percent;
-    return "";
+    // Bubble Card moves the native fill before the lamp reports its new brightness.
+    const fill = box.querySelector(".bubble-range-fill");
+    if (fill && !fill.christmasDuskObserver) {
+      const track = fill.parentElement;
+      const followFill = () => {
+        const match = /^translateX[(]([-.0-9]+)%[)]$/.exec(fill.style.transform);
+        if (!match) return;
+        const percent = Math.min(100, Math.max(0, Number(match[1])));
+        track.style.setProperty("--christmas-dusk-limit", (2 * Math.min(percent, 100 - percent)) + "%");
+      };
+      fill.christmasDuskObserver = new MutationObserver(followFill);
+      fill.christmasDuskObserver.observe(fill, { attributes: true, attributeFilter: ["style"] });
+      followFill();
+    }
+    const setting = this.config.christmas_twilight ?? 6;
+    const value = typeof setting === "string" && setting.startsWith("input_number.")
+      ? hass.states[setting]?.state : setting;
+    const strength = value != null && value !== "" && Number.isFinite(Number(value))
+      ? Math.max(0, Math.min(10, Number(value))) : 6;
+    return ".bubble-range-fill { --christmas-dusk-width: min(" + (6.4 * strength) + "px, "
+      + (1.8 * strength) + "%, var(--christmas-dusk-limit, 0%)); }";
   })()}
