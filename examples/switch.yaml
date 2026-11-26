@@ -1,0 +1,32 @@
+type: custom:bubble-card
+card_type: button
+button_type: switch
+entity: switch.christmas_tree
+name: Christmas tree
+icon: mdi:pine-tree
+force_icon: true
+show_state: true
+tap_action:
+  action: toggle
+button_action:
+  tap_action:
+    action: toggle
+styles: |
+  .bubble-button-card-container { clip-path: inset(0 round 999px); }
+  dashboard-christmas-snow { position: absolute; inset: 0; display: block; z-index: 1; pointer-events: none; }
+  .bubble-name-container, .bubble-icon-container { z-index: 2; }
+  ${(() => {
+    const box = this.shadowRoot?.querySelector(".bubble-button-card-container");
+    if (!box) return "";
+    let snow = box.querySelector("dashboard-christmas-snow");
+    if (!snow) {
+      snow = document.createElement("dashboard-christmas-snow");
+      snow.dataset.place = "tree";
+      snow.setAttribute("aria-hidden", "true");
+      box.append(snow);
+    }
+    const state = hass.states[this.config.entity]?.state;
+    const level = state === "on" ? "100" : state === "off" ? "0" : "";
+    if (snow.getAttribute("data-light-level") !== level) snow.setAttribute("data-light-level", level);
+    return "";
+  })()}

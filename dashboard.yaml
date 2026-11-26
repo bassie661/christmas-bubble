@@ -39,7 +39,7 @@ cards:
         const light = hass.states[this.config.entity];
         const level = light?.state === "on" ? String(Math.round((light.attributes.brightness ?? 255) * 100 / 255))
           : light?.state === "off" ? "0" : "";
-        if (snow.dataset.lightLevel !== level) snow.dataset.lightLevel = level;
+        if (snow.getAttribute("data-light-level") !== level) snow.setAttribute("data-light-level", level);
         const badge = box.querySelector(".bubble-sub-button-1");
         const percent = level === "" ? "—" : level + "%";
         if (badge && badge.dataset.percent !== percent) badge.dataset.percent = percent;
@@ -74,6 +74,6 @@ cards:
         }
         const state = hass.states[this.config.entity]?.state;
         const level = state === "on" ? "100" : state === "off" ? "0" : "";
-        if (snow.dataset.lightLevel !== level) snow.dataset.lightLevel = level;
+        if (snow.getAttribute("data-light-level") !== level) snow.setAttribute("data-light-level", level);
         return "";
       })()}
