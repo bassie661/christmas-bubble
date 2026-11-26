@@ -6,6 +6,17 @@ Two animated Bubble Card buttons for a dimmable light and a tree switch. The sky
 
 ![Animated Christmas light slider and tree switch](preview.gif)
 
+## Project files
+
+| File | What you’ll find |
+| --- | --- |
+| [dashboard.yaml](dashboard.yaml) | The two Bubble Card buttons. Change the light and switch entity IDs here. |
+| [dashboard-christmas-snow.js](dashboard-christmas-snow.js) | The animation code for the sky, snow, trees and cottages. |
+| [preview.gif](preview.gif) | The two buttons in motion. |
+| [preview.png](preview.png) | A still image of the dashboard buttons. |
+| [README.md](README.md#installation) | Installation steps and wind direction settings. |
+| [LICENSE.txt](LICENSE.txt) | The MIT license for using and sharing the project. |
+
 ## Installation
 
 1. Install **Bubble Card** from HACS and check that a regular Bubble Card works on your dashboard. [Bubble Card installation](https://github.com/Clooos/Bubble-Card#installation)
