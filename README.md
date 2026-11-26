@@ -2,7 +2,7 @@
 
 By [bassie661](https://github.com/bassie661).
 
-Give any of your dimmable lights or switches a little winter landscape. Start with one Bubble Card button, or add as many as you like. Each one follows its own device. You can link their wind direction so the chimney smoke drifts the same way across your dashboard, while clouds, snowfall and gusts come and go independently.
+Give any of your dimmable lights or switches a little winter landscape. Start with one Bubble Card button, or add as many as you like. Each one follows its own device. You can link their wind direction so the chimney smoke and snow drift the same way across your dashboard, while clouds, snowfall and gusts come and go independently.
 
 Choose a [light slider](examples/light-slider.yaml) for brightness control or an [on/off button](examples/switch.yaml) for a switch. The slider shows stars across its unlit portion up to 50% brightness and daylight above 50%. A switch has a starry sky when off and sunshine when on.
 
