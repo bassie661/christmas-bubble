@@ -1,0 +1,79 @@
+type: vertical-stack
+cards:
+  - type: custom:bubble-card
+    card_type: button
+    button_type: slider
+    entity: light.christmas_lights
+    name: Christmas lights
+    icon: mdi:string-lights
+    force_icon: true
+    show_state: false
+    use_accent_color: true
+    allow_light_slider_to_0: true
+    slider_live_update: false
+    hold_action:
+      action: more-info
+    sub_button:
+      main:
+        - icon: mdi:lightbulb
+          show_icon: true
+          show_name: false
+          show_state: false
+          tap_action:
+            action: more-info
+    styles: |
+      .bubble-button-card-container { clip-path: inset(0 round 999px); }
+      dashboard-christmas-snow { position: absolute; inset: 0; display: block; z-index: 1; pointer-events: none; }
+      .bubble-name-container, .bubble-icon-container, .bubble-sub-button-container { z-index: 2; }
+      .bubble-sub-button-1::after { content: attr(data-percent); }
+      ${(() => {
+        const box = this.shadowRoot?.querySelector(".bubble-button-card-container");
+        if (!box) return "";
+        let snow = box.querySelector("dashboard-christmas-snow");
+        if (!snow) {
+          snow = document.createElement("dashboard-christmas-snow");
+          snow.dataset.place = "balcony";
+          snow.setAttribute("aria-hidden", "true");
+          box.append(snow);
+        }
+        const light = hass.states[this.config.entity];
+        const level = light?.state === "on" ? String(Math.round((light.attributes.brightness ?? 255) * 100 / 255))
+          : light?.state === "off" ? "0" : "";
+        if (snow.dataset.lightLevel !== level) snow.dataset.lightLevel = level;
+        const badge = box.querySelector(".bubble-sub-button-1");
+        const percent = level === "" ? "—" : level + "%";
+        if (badge && badge.dataset.percent !== percent) badge.dataset.percent = percent;
+        return "";
+      })()}
+  - type: custom:bubble-card
+    card_type: button
+    button_type: switch
+    entity: switch.christmas_tree
+    name: Christmas tree
+    icon: mdi:pine-tree
+    force_icon: true
+    show_state: true
+    tap_action:
+      action: toggle
+    button_action:
+      tap_action:
+        action: toggle
+    styles: |
+      .bubble-button-card-container { clip-path: inset(0 round 999px); }
+      dashboard-christmas-snow { position: absolute; inset: 0; display: block; z-index: 1; pointer-events: none; }
+      .bubble-name-container, .bubble-icon-container { z-index: 2; }
+      ${(() => {
+        const box = this.shadowRoot?.querySelector(".bubble-button-card-container");
+        if (!box) return "";
+        let snow = box.querySelector("dashboard-christmas-snow");
+        if (!snow) {
+          snow = document.createElement("dashboard-christmas-snow");
+          snow.dataset.place = "tree";
+          snow.setAttribute("aria-hidden", "true");
+          box.append(snow);
+        }
+        const state = hass.states[this.config.entity]?.state;
+        const level = state === "on" ? "100" : state === "off" ? "0" : "";
+        if (snow.dataset.lightLevel !== level) snow.dataset.lightLevel = level;
+        return "";
+      })()}

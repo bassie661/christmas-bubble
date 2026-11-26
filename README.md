@@ -1,6 +1,8 @@
 # Christmas Bubble for Home Assistant
 
-Two animated Bubble Card buttons for a dimmable light and a tree switch. The sky follows each device. Above 50% brightness the light gets a daytime sky. At 50% and below, stars appear over the unlit part of the slider. The tree has daylight when on and stars when off. Clouds, gusts and snowfall vary independently on each button. During a snowstorm, wind drives snow past the trees and carves a shallow hollow and builds drifts at the windward wall and behind a small cottage. Its windows glow at night. Chimney smoke gradually appears and fades, stretching into wisps as the wind picks up.
+By [bassie661](https://github.com/bassie661).
+
+Two animated Bubble Card buttons for a dimmable light and a tree switch. The sky follows each device. Above 50% brightness the light gets a daytime sky. At 50% and below, stars appear over the unlit part of the slider. The tree has daylight when on and stars when off. Clouds, gusts and snowfall vary independently on each button. During a storm, snow blows past the trees. It builds up against the windward wall of a cottage and in the shelter behind it, leaving a shallow hollow just ahead of the wall. Its windows glow at night. Chimney smoke gradually appears and fades, stretching into wisps as the wind picks up.
 
 ![Animated Christmas light slider and tree switch](preview.gif)
 
