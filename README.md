@@ -8,28 +8,34 @@ Choose a [light slider](examples/light-slider.yaml) for brightness control or an
 
 ## Button previews
 
-A quiet dashboard with one light off and another on. The switch labels follow the dashboard language (“Aan” for on and “Uit” for off here). [View the daytime button](previews/on.png) or [the nighttime button](previews/off.png) individually.
+Each animation is a 30-second loop.
 
-<img src="preview.gif" width="390" alt="Two separate buttons with dashboard spacing. The light slider is off at 0% and the tree switch is on.">
+Light snow falls on two controls in a quiet dashboard scene. The dimmer is off at 0% and the switch is on. [View the daytime button](previews/on.png) or [the nighttime button](previews/off.png) individually.
+
+<img src="winter-buttons.gif" width="374" alt="Two separate buttons with dashboard spacing. The light slider is off at 0% and the tree switch is on.">
+
+**Shared wind.** These two controls link only their wind direction. Watch the falling snow and chimney smoke drift the same way while each button has its own gusts and snowfall.
+
+<img src="previews/shared-wind.gif" width="374" alt="Two separate buttons with snow falling in a shared wind direction. The light is off in heavy snowfall and the switch is on in a lighter shower.">
 
 **Switching on.** The stars fade and the sun comes out as the switch turns on.
 
-<img src="previews/switch.webp" width="374" alt="A single tree-light switch turning on and off">
+<img src="previews/switch.gif" width="374" alt="A single tree-light switch turning on and off">
 
 **Dimming.** Watch the slider settle at 0%, 26% and 62%. The sky changes to daylight as the brightness passes 50%.
 
-<img src="previews/dim.webp" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
+<img src="previews/dim.gif" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
 
 **A clear night.** A single star catches the eye for a moment above the cottage.
 
-<img src="previews/twinkle.webp" width="374" alt="A gold star twinkles above a cottage on a switched-off button">
+<img src="previews/twinkle.gif" width="374" alt="A gold star twinkles above a cottage on a switched-off button">
 
 <details>
 <summary>Watch a button in a snowstorm</summary>
 
 A stronger gust bends the trees, pulls the smoke into wisps and drives snow against the cottage.
 
-<img src="previews/storm.webp" width="374" alt="One button in a snowstorm with strong wind and drifting snow">
+<img src="previews/storm.gif" width="374" alt="One button in a snowstorm with strong wind and drifting snow">
 </details>
 
 ## Project files
@@ -40,7 +46,7 @@ A stronger gust bends the trees, pulls the smoke into wisps and drives snow agai
 | [dashboard-christmas-snow.js](dashboard-christmas-snow.js) | The animation code for the sky, snow, trees and cottages. |
 | [examples](examples/) | Standalone YAML for each button type. |
 | [previews](previews/) | Individual buttons showing switching, dimming, twinkling and wind. |
-| [preview.gif](preview.gif) | The two buttons in motion. |
+| [winter-buttons.gif](winter-buttons.gif) | The two buttons in motion. |
 | [preview.png](preview.png) | A still image of the dashboard buttons. |
 | [README.md](README.md#installation) | Installation steps and wind direction settings. |
 | [LICENSE.txt](LICENSE.txt) | The MIT license for using and sharing the project. |
