@@ -8,8 +8,6 @@ Choose a [light slider](examples/light-slider.yaml) for brightness control or an
 
 ## Button previews
 
-Each animation is a 30-second loop.
-
 Light snow falls on two controls in a quiet dashboard scene. The dimmer is off at 0% and the switch is on. [View the daytime button](previews/on.png) or [the nighttime button](previews/off.png) individually.
 
 <img src="winter-buttons-en.gif" width="374" alt="Two separate buttons with dashboard spacing. The light slider is off at 0% and the tree switch is on.">
