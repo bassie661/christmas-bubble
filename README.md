@@ -81,4 +81,4 @@ For YAML-managed dashboard resources, use the installation URL with `type: modul
 
 </details>
 
-[Release notes](CHANGELOG.md) · [MIT license](LICENSE.txt)
+[Home Assistant Community discussion](https://community.home-assistant.io/t/christmas-bubble-it-started-with-a-bit-of-snow-on-my-balcony-light-slider/1036838) · [Release notes](CHANGELOG.md) · [MIT license](LICENSE.txt)
