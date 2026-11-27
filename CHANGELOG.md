@@ -8,7 +8,6 @@
 - **Always night** keeps the scene dark while the icon shows the device state. Hover over or drag the dimmer to reveal daylight and the slider fill. The percentage badge stays visible.
 - **Always snowing** and **Always windy** work independently per button, including between storms and gusts. Chimney smoke appears lighter in daylight.
 - Keep the default icon and badge styling, or bring both controls above the scenery with tinted or solid backgrounds.
-- The animated previews show six seconds at 30 fps, matching the dashboard animation target.
 
 ## v1.0.1
 

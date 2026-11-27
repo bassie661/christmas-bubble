@@ -14,34 +14,34 @@ Open **Christmas scenery** in the visual card editor to arrange your village, sh
 
 These six-second previews run at 30 frames per second, the same target as the dashboard animation. Light snow falls across both controls in the first clip. The dimmer is off at 0% and the switch is on. [View the daytime button](previews/on.png) or [the nighttime button](previews/off.png) individually.
 
-<img src="winter-buttons-en-v1.0.2.gif" width="374" alt="Two separate buttons with dashboard spacing. The light slider is off at 0% and the tree switch is on.">
+<img src="winter-buttons-en-v1.0.2-r2.gif" width="374" alt="Two separate buttons with dashboard spacing. The light slider is off at 0% and the tree switch is on.">
 
 **Shared wind.** These two controls link only their wind direction. Watch the falling snow and chimney smoke drift the same way while each button has its own gusts and snowfall.
 
-<img src="previews/shared-wind-en-v1.0.2.gif" width="374" alt="Two separate buttons with snow falling in a shared wind direction. The light is off in heavy snowfall and the switch is on in a lighter shower.">
+<img src="previews/shared-wind-en-v1.0.2-r2.gif" width="374" alt="Two separate buttons with snow falling in a shared wind direction. The light is off in heavy snowfall and the switch is on in a lighter shower.">
 
 **Switching on.** The stars fade and the sun comes out as the switch turns on.
 
-<img src="previews/switch-en-v1.0.2.gif" width="374" alt="A single tree-light switch turning on and off">
+<img src="previews/switch-en-v1.0.2-r2.gif" width="374" alt="A single tree-light switch turning on and off">
 
 **Dimming.** Watch the slider settle at 0%, 26% and 62%. The sky changes to daylight as the brightness passes 50%.
 
-<img src="previews/dim-v1.0.2.gif" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
+<img src="previews/dim-v1.0.2-r2.gif" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
 
 **Twilight edge.** The light stays at 45% while the edge of the blue slider changes from sharp (0) to soft (6) to its widest blend (10). [Adjust the twilight edge](#twilight-edge)
 
-<img src="previews/twilight-edge-v1.0.2.gif" width="374" alt="Christmas light held at 45% brightness, with the twilight edge shown at 0, 6 and 10 out of 10">
+<img src="previews/twilight-edge-v1.0.2-r2.gif" width="374" alt="Christmas light held at 45% brightness, with the twilight edge shown at 0, 6 and 10 out of 10">
 
 **A clear night.** A single star catches the eye for a moment above the cottage.
 
-<img src="previews/twinkle-en-v1.0.2.gif" width="374" alt="A gold star twinkles above a cottage on a switched-off button">
+<img src="previews/twinkle-en-v1.0.2-r2.gif" width="374" alt="A gold star twinkles above a cottage on a switched-off button">
 
 <details>
 <summary>Watch a button in a snowstorm</summary>
 
 A stronger gust bends the trees, pulls the smoke into wisps and drives snow against the cottage.
 
-<img src="previews/storm-en-v1.0.2.gif" width="374" alt="One button in a snowstorm with strong wind and drifting snow">
+<img src="previews/storm-en-v1.0.2-r2.gif" width="374" alt="One button in a snowstorm with strong wind and drifting snow">
 </details>
 
 ## Project files
@@ -52,7 +52,7 @@ A stronger gust bends the trees, pulls the smoke into wisps and drives snow agai
 | [dashboard-christmas-snow.js](dashboard-christmas-snow.js) | The animation code for the sky, snow, trees and cottages. |
 | [examples](examples/) | Standalone YAML for each button type. |
 | [previews](previews/) | Animated previews of switching, dimming, twinkling and wind. |
-| [winter-buttons-en-v1.0.2.gif](winter-buttons-en-v1.0.2.gif) | The two buttons in motion. |
+| [winter-buttons-en-v1.0.2-r2.gif](winter-buttons-en-v1.0.2-r2.gif) | The two buttons in motion. |
 | [preview.png](preview.png) | A still image of the dashboard buttons. |
 | [README.md](README.md#installation) | Installation steps and wind direction settings. |
 | [README.txt](README.txt) | Plain-text installation, upgrade and configuration guide. |
