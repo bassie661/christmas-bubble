@@ -24,6 +24,9 @@ These six-second previews run at 30 frames per second, the same target as the da
 
 <img src="previews/switch-en-v1.0.2-r2.gif" width="374" alt="A single tree-light switch turning on and off">
 
+<details>
+<summary>Slider previews: dimming and twilight edge</summary>
+
 **Dimming.** Watch the slider settle at 0%, 26% and 62%. The sky changes to daylight as the brightness passes 50%.
 
 <img src="previews/dim-v1.0.2-r2.gif" width="374" alt="Christmas light slider moving from zero to 26 percent and then 62 percent">
@@ -31,6 +34,8 @@ These six-second previews run at 30 frames per second, the same target as the da
 **Twilight edge.** The light stays at 45% while the edge of the blue slider changes from sharp (0) to soft (6) to its widest blend (10). [Adjust the twilight edge](#twilight-edge)
 
 <img src="previews/twilight-edge-v1.0.2-r2.gif" width="374" alt="Christmas light held at 45% brightness, with the twilight edge shown at 0, 6 and 10 out of 10">
+
+</details>
 
 **A clear night.** A single star catches the eye for a moment above the cottage.
 
