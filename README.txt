@@ -8,6 +8,8 @@ on a switch and morning comes to the village. Raise a dimmer above 50% and dayli
 rolls in. Pines sway in the wind, smoke drifts from the chimneys and snow settles on
 the roofs.
 
+A Christmas gift for anyone who thought their light switch needed a ski resort.
+
 Installation
 
 1. Install Bubble Card through HACS.

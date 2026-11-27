@@ -4,6 +4,8 @@ Your light switch asked for a Christmas bonus. It got a chalet, seventeen pine t
 
 Give a Bubble Card light slider or switch a little Alpine village of its own. Turn on a switch and morning comes to the village. Raise a dimmer above 50% and daylight rolls in. Pines sway in the wind, smoke drifts from the chimneys and snow settles on the roofs.
 
+A Christmas gift for anyone who thought their light switch needed a ski resort.
+
 ## Installation
 
 1. Install [Bubble Card](https://github.com/Clooos/Bubble-Card#installation) through HACS.
