@@ -1,5 +1,9 @@
 # Christmas Bubble Cards release notes
 
+## v1.0.3
+
+- Save or share a scenery code from the card editor. Paste it into another slider or switch to recreate the same village and star map, with lighting and weather set per button.
+
 ## v1.0.2
 
 - Customize each button in the new **Christmas scenery** editor. Set tree and chalet counts, wind direction and slider twilight. Built-in help includes the installed version and a GitHub link.

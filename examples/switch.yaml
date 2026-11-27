@@ -27,7 +27,7 @@ styles: |
       snow.setAttribute("aria-hidden", "true");
       box.append(snow);
     }
-    for (const key of ["trees", "houses", "seed", "wind", "house_position", "house_size", "house_clustering", "always_night", "always_snowing", "always_windy", "controls"]) {
+    for (const key of ["trees", "houses", "seed", "profile", "wind", "house_position", "house_size", "house_clustering", "always_night", "always_snowing", "always_windy", "controls"]) {
       const setting = String(this.config["christmas_" + key] ?? "");
       const attr = "data-" + key.replaceAll("_", "-");
       if (snow.getAttribute(attr) !== setting) snow.setAttribute(attr, setting);

@@ -1,59 +1,58 @@
-Christmas Bubble for Home Assistant | v1.0.2
+Christmas Bubble for Home Assistant | v1.0.3
 
-Animated winter scenery for Bubble Card light sliders and switches. Sliders change
-to daylight above 50% brightness. Switches follow the entity’s on/off state. The
-animation targets 30 fps, pauses offscreen and respects reduced motion.
+Your light switch asked for a Christmas bonus. It got a chalet, seventeen pine trees
+and a chimney it now has to maintain.
+
+Give a Bubble Card light slider or switch a little Alpine village of its own. Turn
+on a switch and morning comes to the village. Raise a dimmer above 50% and daylight
+rolls in. Pines sway in the wind, smoke drifts from the chimneys and snow settles on
+the roofs.
 
 Installation
 
 1. Install Bubble Card through HACS.
-2. Extract christmas-buttons.zip. Copy dashboard-christmas-snow.js to your Home
-   Assistant configuration directory under www/. Restart Home Assistant if you just
-   created that directory.
-3. Under Settings → Dashboards → ⋮ → Resources, add
-   /local/dashboard-christmas-snow.js?v=1.0.2 as a JavaScript module. Enable
-   Advanced Mode in your profile if Resources is hidden. For YAML-managed
-   resources, use the same URL with type: module.
-4. Add a Manual card using examples/light-slider.yaml, examples/switch.yaml or
-   dashboard.yaml for both. Replace the example entity IDs, save and reload the
-   dashboard.
+2. Download christmas-buttons.zip and unzip it. Copy dashboard-christmas-snow.js
+   into the www/ folder in your Home Assistant configuration directory. If you just
+   created the folder, restart Home Assistant once.
+3. Go to Settings → Dashboards → ⋮ → Resources. Add /local/dashboard-christmas-
+   snow.js?v=1.0.3 and choose JavaScript module. If Resources is hidden, turn on
+   Advanced Mode in your profile.
+4. Add a Manual card to your dashboard. Paste the light slider example
+   (examples/light-slider.yaml), the switch example (examples/switch.yaml) or both
+   cards together (dashboard.yaml). Replace the example light or switch with your
+   own entity ID, save and reload the dashboard.
 
-Upgrade from v1.0.0 or v1.0.1
+Updating an existing village
 
-Replace the JavaScript file and set v=1.0.2 on the existing resource URL. Keep any
-wind parameter. Copy the updated styles: block from the matching example into each
-Christmas button, then reload the dashboard.
+Replace dashboard-christmas-snow.js with the copy from the new zip. Edit the
+existing resource URL so it reads v=1.0.3, keeping any wind setting. In each
+Christmas card, replace just the styles: block with the one from its matching
+example above. Save and reload. This lets a switch use a slider’s scenery code and
+keeps your own entity and village settings.
 
-Per-button options
+Make the village yours
 
-Configure these under Christmas scenery in the card editor, or set the YAML keys
-alongside entity.
+Edit your card and open Christmas scenery. The preview shows your changes as you go.
 
-- Trees (christmas_trees) — 0–36, including foreground pines. Defaults to 4 on
-  sliders and 7 on switches.
-- Chalets (christmas_houses) — 0–8. Defaults to 1.
-- Chalet placement (christmas_house_position) — left, center (default), right or
-  spread. Left and right move the whole village. Spread increases spacing within
-  the village.
-- Chalet size (christmas_house_size) — smaller, normal (default) or bigger.
-- Chalet clustering (christmas_house_clustering) — tight, normal (default) or
-  loose.
-- Shuffle layout (christmas_seed) — Generate a new arrangement. The arrows revisit
-  layouts from this editing session. Saving keeps the selected seed.
-- Wind direction (christmas_wind) — shared, left, right or independent. Omit to
-  inherit the dashboard setting. Shared wind changes direction every four minutes.
-- Always windy (christmas_always_windy) — Keep wind blowing between gusts. Default
-  false.
-- Always snowing (christmas_always_snowing) — Keep snow falling between storms.
-  Default false.
-- Always night (christmas_always_night) — Keep the sky dark and show device state
-  through the icon. Hover or drag a dimmer to reveal daylight and slider fill.
-  Default false.
-- Icon and badge (christmas_controls) — default, tinted or solid. Tinted and solid
-  place the controls above the scenery.
-- Twilight edge (christmas_twilight, sliders only) — Slider fill transition width
-  from 0 (sharp) to 10 (widest). Defaults to 6. Also accepts a Number helper such
-  as input_number.christmas_twilight.
+- Trees and chalets — Plant up to 36 pines and add up to 8 chalets. Set either count
+  to zero to leave them out. Pick a side for your village, choose the size of the
+  houses and decide how closely they huddle together.
+- Shuffle layout — Try a new arrangement. If you liked the last one better, use the
+  arrows to go back and forth before saving.
+- Scenery code — Found a keeper? Click the copy icon beside the code to save it
+  somewhere or send it to a friend. Paste it into another card’s Scenery code field,
+  select Apply code for a preview, then Save. The trees, chalets and stars line up
+  across phones and desktops. Each button still controls its own light and weather.
+- Snow and wind — Let snowstorms and gusts come and go, or turn on Always snowing
+  and Always windy independently. Neighbouring cards can share a breeze. You can
+  also pick a direction or give one card its own wind.
+- Always night — Keep the stars out when the lights are on. The icon still shows the
+  device state. Hover over or drag a dimmer to see the daylight and slider fill, or
+  glance at its percentage badge.
+- Icon and badge — Keep the usual look, or bring the controls in front of the snow
+  with a tinted or solid background.
+- Twilight edge — On a slider, choose how softly daylight blends into night. Use 0
+  for a sharp edge and 10 for the softest fade, or link a Number helper to adjust it
+  from your dashboard.
 
-Set the dashboard wind direction on the resource URL, for example
-/local/dashboard-christmas-snow.js?v=1.0.2&wind=left. The default is shared.
+For the YAML settings and dashboard wind options, see README.md in this zip.

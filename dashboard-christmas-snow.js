@@ -85,14 +85,14 @@ const groves = {
   tree: [[.15, 12], [.49, 16], [.54, 11], [.75, 13], [.80, 22], [.86, 16], [.91, 12]],
 };
 
-function groveTree(index, balcony, layout) {
+function groveTree(index, balcony, layout, snowRandom) {
   const random = layout ? layoutRandom(layout.seed, index + 2) : undefined;
   const shift = layout ? layout.groveShift[index % 3] + (random() - .5) * .05 : 0;
   const size = random ? .85 + random() * .26 : 1;
   const anchors = balcony ? groves.balcony : groves.tree;
   if (index < anchors.length) {
     const [position, height] = anchors[index];
-    return pine(position + shift, height * size, (height - 6) / 22);
+    return pine(position + shift, height * size, (height - 6) / 22, snowRandom);
   }
   // Add saplings around the same stands. Stagger rows without reshuffling on resize.
   const row = index - anchors.length;
@@ -101,7 +101,7 @@ function groveTree(index, balcony, layout) {
   const depth = .09 + .77 * fraction(.38 + row * .618034);
   const spread = (fraction(.32 + row * .414214) - .5) * .14;
   const height = (8 + 18 * depth) * (.70 + .30 * fraction(.67 + row * .732051));
-  return pine(centers[row % centers.length] + spread + shift, height * size, depth);
+  return pine(centers[row % centers.length] + spread + shift, height * size, depth, snowRandom);
 }
 
 // The main doorstep and the two ends of a larger village each get a foreground pine.
@@ -111,9 +111,9 @@ function planChaletTrees(random = Math.random) {
   }));
 }
 
-function chaletTree(house, placement) {
+function chaletTree(house, placement, snowRandom) {
   const height = Math.max(10 * house.villageScale, house.style.ridge * house.scale * placement.height);
-  const tree = pine(house.position, height, .90);
+  const tree = pine(house.position, height, .90, snowRandom);
   tree.house = house;
   tree.houseScale = house.scale;
   return tree;
@@ -167,7 +167,7 @@ function airGustAt(x, center, strength, gust) {
 }
 
 // Project each whorl of boughs onto the button. Positive z points towards the viewer.
-function pine(position, height, depth) {
+function pine(position, height, depth, snowRandom) {
   const branches = [];
   for (let tier = 0; tier < 3; tier++) {
     const span = height * (.38 - .075 * tier);
@@ -178,7 +178,7 @@ function pine(position, height, depth) {
       const z = Math.sin(angle);
       const top = -height * (.59 + .2 * tier);
       const drop = height * (.45 - tier * .055) + z * span * .42;
-      whorl.push({x, z, top, drop, span, snow: between(.30, .59)});
+      whorl.push({x, z, top, drop, span, snow: .30 + .29 * snowRandom()});
     }
     branches.push(...whorl.sort((a, b) => a.z - b.z));
   }
@@ -198,24 +198,25 @@ function smoothStep(value) {
   return v * v * (3 - 2 * v);
 }
 
-function nightSky(balcony) {
+function nightSky(balcony, random) {
+  const range = (lo, hi) => lo + (hi - lo) * random();
   const stars = Array.from({length: 14}, () => ({
-    x: between(.13, .97), y: between(.045, .32), radius: between(.55, 1.05),
+    x: range(.13, .97), y: range(.045, .32), radius: range(.55, 1.05),
   }));
   const centers = balcony ? [[.39, .11], [.65, .23], [.84, .10]] : [[.30, .12], [.55, .19], [.78, .15]];
   for (const [x, y] of centers) {
     for (let i = 0; i < 6; i++) {
-      const angle = between(0, 2 * Math.PI);
-      const spread = between(.24, 1);
+      const angle = range(0, 2 * Math.PI);
+      const spread = range(.24, 1);
       stars.push({x: x + .040 * spread * Math.cos(angle), y: y + .076 * spread * Math.sin(angle),
-        radius: between(.33, .78)});
+        radius: range(.33, .78)});
     }
   }
   return stars;
 }
 
 class SnowScene {
-  constructor(canvas, balcony, defaultTreeSeed) {
+  constructor(canvas, balcony) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.flakes = [];
@@ -236,23 +237,16 @@ class SnowScene {
     this.windMode = windMode;
     this.houses = [];
     this.trees = [];
-    this.defaultTreePlan = planChaletTrees(defaultTreeSeed === undefined ? Math.random : layoutRandom(defaultTreeSeed, 1));
-    this.chaletTreePlan = this.defaultTreePlan;
     this.scenery = [];
-    this.stars ??= nightSky(this.balcony);
-    this.clouds ??= (this.balcony ? [[.22, .10, .68], [.46, .16, 1], [.62, .10, .60]]
-      : [[.43, .12, .77], [.68, .16, .92]]).map(([position, height, size]) => ({
-      position, height, size, offset: 0, wind: 0, phase: between(0, 2 * Math.PI),
-    }));
   }
 
   updateScenery(treeCount, houseCount, width, housePosition, houseSize, houseClustering) {
-    if (!width || (this.width === width && this.trees.length === treeCount && this.houses.length === houseCount
+    if (!width || (this.trees.length === treeCount && this.houses.length === houseCount
       && this.housePosition === housePosition && this.houseSize === houseSize && this.houseClustering === houseClustering)) return;
     this.housePosition = housePosition;
     this.houseSize = houseSize;
     this.houseClustering = houseClustering;
-    while (this.houses.length < houseCount) this.houses.push(chalet(this.houses.length, this.balcony, this.layout));
+    while (this.houses.length < houseCount) this.houses.push(chalet(this.houses.length, this.sliderLandscape, this.layout));
     this.houses.length = houseCount;
     placeChalets(this.houses, width, housePosition, houseSize, houseClustering);
     const streets = [...this.houses].sort((a, b) => a.position - b.position);
@@ -270,7 +264,9 @@ class SnowScene {
       const house = doors[slot] ?? undefined;
       let tree = this.trees[i];
       if (!tree || tree.house !== house || tree.houseScale !== house?.scale) {
-        tree = this.trees[i] = house ? chaletTree(house, this.chaletTreePlan[slot]) : groveTree(i, this.balcony, this.layout);
+        const snowRandom = layoutRandom(this.layoutSeed, 100 + i);
+        tree = this.trees[i] = house ? chaletTree(house, this.chaletTreePlan[slot], snowRandom)
+          : groveTree(i, this.sliderLandscape, this.layout, snowRandom);
         tree.grovePosition = tree.position;
       }
       if (!house) continue;
@@ -293,27 +289,44 @@ class SnowScene {
     this.scenery = [...this.trees, ...this.houses].sort((a, b) => a.depth - b.depth);
   }
 
-  update({width, height, scale, visible, reduced, level, treeCount, houseCount, seed, wind, housePosition, houseSize, houseClustering, alwaysNight, alwaysSnowing, alwaysWindy, adjusting}) {
+  update({width, height, scale, visible, reduced, level, treeCount, houseCount, seed, profile, wind, housePosition, houseSize, houseClustering, alwaysNight, alwaysSnowing, alwaysWindy, adjusting}) {
     const layoutSeed = Number(seed) >>> 0;
-    if (layoutSeed !== (this.layout?.seed ?? 0)) {
+    const sliderLandscape = profile === 'slider' || (profile !== 'switch' && this.balcony);
+    if (layoutSeed !== this.layoutSeed || sliderLandscape !== this.sliderLandscape) {
+      this.layoutSeed = layoutSeed;
+      this.sliderLandscape = sliderLandscape;
       const random = layoutRandom(layoutSeed, 0);
       this.layout = layoutSeed ? {seed: layoutSeed, side: random() < .5 ? -1 : 1,
         spacing: .97 + random() * .08, style: Math.floor(random() * chaletStyles.length),
         groveShift: Array.from({length: 3}, () => (random() - .5) * .15)} : undefined;
-      this.chaletTreePlan = layoutSeed ? planChaletTrees(layoutRandom(layoutSeed, 1)) : this.defaultTreePlan;
+      this.chaletTreePlan = planChaletTrees(layoutRandom(layoutSeed, 1));
+      this.stars = nightSky(sliderLandscape, layoutRandom(layoutSeed, 80));
+      this.flareStar = undefined;
+      const sky = layoutRandom(layoutSeed, 81);
+      this.groundPhase = sky() * 2 * Math.PI;
+      this.clouds = (sliderLandscape ? [[.22, .10, .68], [.46, .16, 1], [.62, .10, .60]]
+        : [[.43, .12, .77], [.68, .16, .92]]).map(([position, height, size]) => ({
+        position, height, size, offset: 0, wind: 0, phase: sky() * 2 * Math.PI,
+      }));
       this.trees = [];
       this.houses = [];
       this.scenery = [];
     }
     this.windMode = ['left', 'right', 'independent', 'shared'].includes(wind) ? wind : windMode;
-    this.updateScenery(sceneryCount(treeCount, this.balcony ? 4 : 7, 36), sceneryCount(houseCount, 1, village.length), width, housePosition, houseSize, houseClustering);
-    if (this.width !== width || this.height !== height || this.scale !== scale) {
-      this.width = width;
-      this.height = height;
+    // Resolve collisions on one ground plan, then project its normalized positions onto the card.
+    const planWidth = 400;
+    this.updateScenery(sceneryCount(treeCount, this.balcony ? 4 : 7, 36), sceneryCount(houseCount, 1, village.length),
+      width && height ? planWidth : 0, housePosition, houseSize, houseClustering);
+    if (this.displayWidth !== width || this.displayHeight !== height || this.scale !== scale) {
+      this.displayWidth = width;
+      this.displayHeight = height;
       this.scale = scale;
+      const unit = width && height ? Math.min(width / planWidth, height / 56) : 1;
+      this.width = width / unit;
+      this.height = height / unit;
       this.canvas.width = Math.round(width * scale);
       this.canvas.height = Math.round(height * scale);
-      if (width && height) this.ctx.setTransform(this.canvas.width / width, 0, 0, this.canvas.height / height, 0, 0);
+      if (width && height) this.ctx.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0);
     }
     this.alwaysSnowing = alwaysSnowing;
     this.alwaysWindy = alwaysWindy;
@@ -548,12 +561,12 @@ class SnowScene {
       ctx.clip();
       const starLight = (1 - this.daylight) * (1 - .96 * this.cloudCover);
       ctx.globalAlpha = starLight;
-      this.drawGalaxy(this.width * (this.balcony ? .57 : .70), this.height * .14, .86, -.31);
-      this.drawGalaxy(this.width * (this.balcony ? .73 : .48), this.height * .11, .49, .24);
+      this.drawGalaxy(this.width * (this.sliderLandscape ? .57 : .70), this.height * .14, .86, -.31);
+      this.drawGalaxy(this.width * (this.sliderLandscape ? .73 : .48), this.height * .11, .49, .24);
       const visible = this.stars.filter(star => {
         const x = star.x * this.width, y = star.y * this.height;
-        return x >= boundary && (x >= this.width * .47 || y <= this.height * .20)
-          && (!this.balcony || x <= this.width - 70 || y <= 9);
+        return x >= boundary && (star.x >= .47 || star.y <= .20)
+          && (!this.sliderLandscape || star.x <= .825 || star.y <= .16);
       });
       if (!this.reduced && this.cloudCover < .4 && this.sunTarget === 0 && this.elapsed >= this.nextFlare && visible.length) {
         this.flareStar = visible[Math.floor(Math.random() * visible.length)];
@@ -577,7 +590,7 @@ class SnowScene {
       ctx.restore();
     }
     if (this.daylight > 0) {
-      const x = this.width - (this.balcony ? 84 : 31);
+      const x = this.width * (this.sliderLandscape ? .79 : .9225);
       const y = 14;
       ctx.globalAlpha = this.daylight * (1 - .60 * this.cloudCover);
       const glow = ctx.createRadialGradient(x, y, 2, x, y, 13);
@@ -863,7 +876,7 @@ class SnowScene {
 
   groundTop(index) {
     const x = index / (this.ground.length - 1);
-    const depth = 3.4 + this.ground[index] + .85 * Math.sin(x * 13 + this.phase);
+    const depth = 3.4 + this.ground[index] + .85 * Math.sin(x * 13 + this.groundPhase);
     return this.height - depth * snowHeightScale;
   }
 
@@ -1113,7 +1126,7 @@ class SnowScene {
     if (this.houses.length > 1) {
       const main = this.houses[0];
       const x = main.position * this.width;
-      const radius = Math.max(...this.houses.map(h => Math.abs(h.offset) * h.villageScale + h.eave * h.scale));
+      const radius = Math.max(...this.houses.map(h => Math.abs(h.position - main.position) * this.width + h.eave * h.scale));
       const crest = this.height - 1 - 9 * main.villageScale;
       ctx.beginPath();
       ctx.moveTo(x - radius - 18, this.height);
@@ -1138,14 +1151,12 @@ class SnowScene {
 if (typeof document === 'undefined') {
   let scene;
   self.onmessage = ({data}) => {
-    if (data.canvas) scene = new SnowScene(data.canvas, data.balcony, data.defaultTreeSeed);
+    if (data.canvas) scene = new SnowScene(data.canvas, data.balcony);
     scene.update(data);
   };
 } else if (!customElements.get('dashboard-christmas-snow')) {
-  // The editor may recreate a preview while browsing. Keep its original unseeded pines for this page visit.
-  const defaultTreeSeeds = new Map();
   class DashboardChristmasSnow extends HTMLElement {
-    static observedAttributes = ['data-light-level', 'data-trees', 'data-houses', 'data-seed', 'data-wind', 'data-house-position', 'data-house-size', 'data-house-clustering', 'data-always-night', 'data-always-snowing', 'data-always-windy'];
+    static observedAttributes = ['data-light-level', 'data-trees', 'data-houses', 'data-seed', 'data-profile', 'data-wind', 'data-house-position', 'data-house-size', 'data-house-clustering', 'data-always-night', 'data-always-snowing', 'data-always-windy'];
 
     constructor() {
       super();
@@ -1281,9 +1292,6 @@ if (typeof document === 'undefined') {
     connectedCallback() {
       this.bindNightControls();
       this.balcony = this.dataset.place === 'balcony';
-      const cardKey = this.getRootNode().host?.config?.entity ?? this.dataset.place;
-      if (!defaultTreeSeeds.has(cardKey)) defaultTreeSeeds.set(cardKey, Math.floor(Math.random() * 0x100000000));
-      this.defaultTreeSeed = defaultTreeSeeds.get(cardKey);
       const canvas = this.createCanvas();
       if (typeof Worker !== 'undefined' && canvas.transferControlToOffscreen) {
         try {
@@ -1293,12 +1301,12 @@ if (typeof document === 'undefined') {
             if (this.worker === worker) this.useLocalCanvas();
           };
           const offscreen = canvas.transferControlToOffscreen();
-          worker.postMessage({...this.state(), balcony: this.balcony, defaultTreeSeed: this.defaultTreeSeed, canvas: offscreen}, [offscreen]);
+          worker.postMessage({...this.state(), balcony: this.balcony, canvas: offscreen}, [offscreen]);
         } catch {
           this.useLocalCanvas();
         }
       } else {
-        this.scene = new SnowScene(canvas, this.balcony, this.defaultTreeSeed);
+        this.scene = new SnowScene(canvas, this.balcony);
       }
       this.viewport.observe(this);
       this.resize.observe(this);
@@ -1310,7 +1318,7 @@ if (typeof document === 'undefined') {
     useLocalCanvas() {
       this.worker?.terminate();
       this.worker = undefined;
-      this.scene = new SnowScene(this.createCanvas(), this.balcony, this.defaultTreeSeed);
+      this.scene = new SnowScene(this.createCanvas(), this.balcony);
       this.sync();
     }
 
@@ -1318,7 +1326,7 @@ if (typeof document === 'undefined') {
       const value = Number.parseFloat(this.dataset.lightLevel);
       return {width: this.width, height: this.height, scale: Math.min(devicePixelRatio || 1, 2),
         visible: Boolean(this.isConnected && this.visible && !document.hidden),
-        treeCount: this.dataset.trees, houseCount: this.dataset.houses, seed: this.dataset.seed, wind: this.dataset.wind,
+        treeCount: this.dataset.trees, houseCount: this.dataset.houses, seed: this.dataset.seed, profile: this.dataset.profile, wind: this.dataset.wind,
         housePosition: this.dataset.housePosition, houseSize: this.dataset.houseSize, houseClustering: this.dataset.houseClustering,
         alwaysSnowing: this.dataset.alwaysSnowing === 'true', alwaysWindy: this.dataset.alwaysWindy === 'true',
         alwaysNight: this.dataset.alwaysNight === 'true', adjusting: this.hasAttribute('data-adjusting'),
@@ -1400,7 +1408,7 @@ const windyField = toggle('christmas_always_windy', 'Always windy');
 const windField = {name: 'christmas_wind', label: 'Wind direction', selector: {select: {options: windOptions, mode: 'dropdown'}}};
 const twilightField = numberField('twilightWidth', 'Twilight edge width', 0, 10);
 const helperField = {name: 'twilightHelper', label: 'Twilight number helper (optional)', selector: {entity: {domain: 'input_number'}}};
-const seedField = numberField('christmas_seed', 'Layout seed (optional)', 1, 2147483647);
+const seedField = numberField('christmas_seed', 'Layout seed (optional)', 1, 4294967295);
 
 function updateChristmasDraft(editor, edits) {
   const config = {...editor._config};
@@ -1430,7 +1438,31 @@ function christmasEditorData(config) {
   return data;
 }
 
-const sceneryVersion = 'v1.0.2';
+// CB1 describes only the static scenery. Importing it leaves device and weather settings intact.
+function sceneryCode(config) {
+  const data = christmasEditorData(config);
+  const profile = ['slider', 'switch'].includes(config.christmas_profile) ? config.christmas_profile
+    : config.button_type === 'slider' ? 'slider' : 'switch';
+  const choice = field => field.selector.select.options.find(option => option.value === data[field.name])?.value;
+  return ['CB1', profile, Number(data.christmas_seed) >>> 0,
+    sceneryCount(data.christmas_trees, profile === 'slider' ? 4 : 7, 36), sceneryCount(data.christmas_houses, 1, village.length),
+    choice(positionField) ?? 'center', choice(sizeField) ?? 'normal', choice(clusteringField) ?? 'normal'].join('-');
+}
+
+function decodeSceneryCode(text) {
+  const parts = text.trim().toLowerCase().split('-');
+  const [version, profile, seed, trees, houses, position, size, clustering] = parts;
+  const integer = (value, max) => /^\d+$/.test(value) && Number(value) <= max;
+  const accepts = (field, value) => field.selector.select.options.some(option => option.value === value);
+  if (parts.length !== 8 || version !== 'cb1' || !['slider', 'switch'].includes(profile) ||
+      !integer(seed, 0xffffffff) || !integer(trees, 36) || !integer(houses, village.length) ||
+      !accepts(positionField, position) || !accepts(sizeField, size) || !accepts(clusteringField, clustering)) return;
+  return {christmas_profile: profile, christmas_seed: Number(seed) || undefined,
+    christmas_trees: Number(trees), christmas_houses: Number(houses), christmas_house_position: position,
+    christmas_house_size: size, christmas_house_clustering: clustering};
+}
+
+const sceneryVersion = 'v1.0.3';
 
 function layoutHistory(editor) {
   const seed = editor._config.christmas_seed;
@@ -1462,6 +1494,20 @@ function createChristmasPanel(editor) {
         </button>
       </div>
       <small>Shuffle to try another layout. Use the arrows to revisit layouts from this editing session. Select Save to keep the one in the preview.</small>
+      <div style="display:grid;gap:6px">
+        <label for="christmas-scenery-code">Scenery code</label>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px">
+          <input id="christmas-scenery-code" data-code type="text" spellcheck="false" autocapitalize="none" autocomplete="off" aria-describedby="christmas-code-help"
+            style="box-sizing:border-box;width:100%;padding:8px;font:inherit;color:var(--primary-text-color);background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:4px">
+          <button type="button" data-copy title="Copy code" aria-label="Copy scenery code"
+            style="width:44px;height:44px;background:transparent;color:var(--primary-text-color);border:0;cursor:pointer">
+            <ha-icon icon="mdi:content-copy" aria-hidden="true"></ha-icon>
+          </button>
+        </div>
+        <small id="christmas-code-help">Copy this code to keep your layout or share it with a friend. Enter a code and select Apply code to preview its trees, chalets and stars. Select Save to keep it.</small>
+        <ha-button data-apply style="justify-self:start">Apply code</ha-button>
+        <small data-code-status role="status"></small>
+      </div>
       <details>
         <summary style="display:flex;align-items:center;gap:8px;min-height:36px;cursor:pointer">
           <ha-icon icon="mdi:help-circle-outline" aria-hidden="true"></ha-icon>
@@ -1479,7 +1525,7 @@ function createChristmasPanel(editor) {
         <p>Always night keeps the sky dark while the icon shows whether the device is on or off.</p>
         <p>Always snowing keeps flakes falling between snowstorms. Always windy keeps the trees, smoke and drifting snow moving in the selected wind direction between gusts. You can use either setting on its own or both together.</p>
         <p data-twilight-help>In Always night mode, hovering over the dimmer or dragging it reveals the slider and daylight. Releasing the slider restores the night sky. The percentage badge stays visible. The twilight edge blends the slider fill into the sky. Choose 0 for a sharp edge or 10 for the widest blend. A Number helper can control the width. Clear the helper to use a fixed width.</p>
-        <p>Shuffle layout keeps your counts and picks new tree positions and chalet arrangements. The seed identifies the arrangement. Use the same seed, counts and button type to reproduce it.</p>
+        <p>Shuffle layout keeps your counts and picks new tree positions and chalet arrangements. Copy the scenery code to keep the seed, village settings and landscape style together. Paste it on another button, select Apply code to preview it, then Save. The code restores the trees, chalets and star positions on sliders and switches. Lighting follows the device, and each card animates its own weather.</p>
       </details>
     </div>`;
   const form = panel.querySelector('ha-form');
@@ -1497,6 +1543,32 @@ function createChristmasPanel(editor) {
       else edits[name] = value;
     }
     if (Object.keys(edits).length) updateChristmasDraft(editor, edits);
+  });
+  const input = panel.querySelector('[data-code]');
+  const status = panel.querySelector('[data-code-status]');
+  panel.querySelector('[data-copy]').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(input.value);
+      status.textContent = 'Scenery code copied.';
+    } catch {
+      input.focus();
+      input.select();
+      status.textContent = document.execCommand('copy') ? 'Scenery code copied.' : 'Copy the selected scenery code.';
+    }
+  });
+  function applyCode() {
+    const config = decodeSceneryCode(input.value);
+    if (!config) {
+      status.textContent = 'Enter a complete CB1 scenery code.';
+      return;
+    }
+    updateChristmasDraft(editor, config);
+    input.value = sceneryCode(editor._config);
+    status.textContent = 'Scenery applied to the preview.';
+  }
+  panel.querySelector('[data-apply]').addEventListener('click', applyCode);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); applyCode(); }
   });
   function selectLayout(history, index) {
     history.index = index;
@@ -1538,6 +1610,13 @@ function syncChristmasEditor(editor) {
   const history = layoutHistory(editor);
   panel.querySelector('[data-previous]').hidden = history.index === 0;
   panel.querySelector('[data-next]').hidden = history.index === history.seeds.length - 1;
+  const code = sceneryCode(config);
+  const input = panel.querySelector('[data-code]');
+  if (input.defaultValue !== code) {
+    input.defaultValue = code;
+    input.value = code;
+    panel.querySelector('[data-code-status]').textContent = '';
+  }
   const data = christmasEditorData(config);
   const form = panel.querySelector('ha-form');
   const schema = [treeField, houseField, positionField, clusteringField, sizeField, windField, nightField, snowField, windyField, controlsField];
