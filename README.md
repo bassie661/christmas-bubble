@@ -51,7 +51,7 @@ For YAML-managed dashboard resources, use the installation URL with `type: modul
 
 ## Previews
 
-<img src="winter-buttons-en-v1.0.2-r2.gif" width="374" alt="Christmas light slider at 0% and tree switch on">
+<img src="previews/winter-buttons-en-v1.0.2-r2.gif" width="374" alt="Christmas light slider at 0% and tree switch on">
 
 **Shared wind**
 
