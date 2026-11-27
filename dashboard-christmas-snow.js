@@ -17,7 +17,9 @@ function windHeading(mode, now, localDirection) {
 }
 const maxDriftDepth = 12;
 // Back-row silhouettes share a higher snow line and project smaller on the button.
-const groundInset = depth => 1 + (1 - depth) * 6;
+// Set the back street at the crest of the snowbank and the front street near its foot.
+const chaletInset = house => 1 + 8 * house.villageScale * smoothStep((.76 - house.depth) / .55);
+const treeInset = tree => tree.house ? Math.max(4, chaletInset(tree.house) - 1) : 1 + (1 - tree.depth) * 6;
 const chaletStyles = [
   {wall: '#885f46', half: 8.5, ridge: 20, lamp: '#ffda85', chimneyX: 5.1},
   {wall: '#b69578', half: 10, ridge: 19, lamp: '#ffdca1', chimneyX: -5.8},
@@ -25,27 +27,56 @@ const chaletStyles = [
   {wall: '#b5a28b', half: 9.5, ridge: 21, lamp: '#ffe4ab', chimneyX: -4.8},
 ];
 
-// The largest chalet anchors the village. Smaller chalets alternate on either side.
-const village = [[0, .78], [-1, .47], [1, .44], [-2, .31],
-  [2, .29], [-3, .17], [3, .15], [-4, .08]];
+// Horizontal lots in main-roof half-widths. The back street sits in the gaps of the front street.
+const village = [[0, .78], [-1.04, .31], [1.07, .35], [-1.93, .64],
+  [1.96, .61], [-2.91, .24], [2.96, .27], [-3.80, .50]];
 
-function chalet(index, balcony) {
-  const [lane, depth] = village[index];
-  const style = chaletStyles[index % chaletStyles.length];
+// Separate reproducible scenery from the random weather, smoke and snow.
+function layoutRandom(seed, stream) {
+  let state = (seed ^ Math.imul(stream + 1, 0x9e3779b1)) >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let n = Math.imul(state ^ state >>> 15, state | 1);
+    n ^= n + Math.imul(n ^ n >>> 7, n | 61);
+    return ((n ^ n >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function chalet(index, balcony, layout) {
+  const [lot, depth] = village[index];
+  const style = chaletStyles[(index + (layout?.style ?? 0)) % chaletStyles.length];
   const smokePeriod = between(112, 158);
-  return {kind: 'house', lane, depth,
+  const jitter = layout && index ? (layoutRandom(layout.seed, index + 48)() - .5) * .18 : 0;
+  return {kind: 'house', lot: (lot + jitter) * (layout?.spacing ?? 1) * (layout?.side ?? 1), depth,
     naturalScale: (.48 + depth * .98) * (balcony ? .88 : 1), style, balconyRail: index % 3 === 1,
     eave: style.half + 2.5, chimneyTop: -style.ridge - 3, snow: [.22, .22],
     smoke: [], smokePeriod, smokeAge: between(0, smokePeriod), smokeCredit: 0};
 }
 
-function placeChalets(houses, width) {
-  // Reserve room for the outermost roof. On narrow buttons the whole village fits to scale.
-  const outerLane = Math.ceil((houses.length - 1) / 2);
-  const spacing = Math.min(Math.max(28, Math.min(42, width * .08)), width * .47 / (outerLane + .5));
+function placeChalets(houses, width, position, size, clustering) {
+  if (!houses.length) return;
+  const factor = size === 'smaller' ? .78 : size === 'bigger' ? 1.10 : 1;
+  const mainRoof = houses[0].eave * houses[0].naturalScale;
+  const lotSpacing = clustering === 'tight' ? .78 : clustering === 'loose' ? 1.45 : 1;
+  const spacing = lotSpacing * (position === 'spread' ? 1.45 : 1);
+  let left = -mainRoof, right = mainRoof;
   for (const house of houses) {
-    house.position = .5 + house.lane * spacing / width;
-    house.scale = house.naturalScale * Math.min(1, spacing / 28);
+    house.offset = house.lot * mainRoof * spacing;
+    const roof = house.eave * house.naturalScale;
+    left = Math.min(left, house.offset - roof);
+    right = Math.max(right, house.offset + roof);
+  }
+
+  // Keep even the outer eaves in the selected third, with a margin at the rounded end.
+  const start = width * (position === 'right' ? .65 : .065);
+  const end = width * (position === 'left' ? .35 : .935);
+  const scale = Math.min(factor, (end - start) / (right - left));
+  const target = width * (position === 'left' ? .21 : position === 'right' ? .79 : .5);
+  const center = Math.max(start - left * scale, Math.min(target, end - right * scale));
+  for (const house of houses) {
+    house.villageScale = scale;
+    house.position = (center + house.offset * scale) / width;
+    house.scale = house.naturalScale * scale;
   }
 }
 
@@ -54,11 +85,14 @@ const groves = {
   tree: [[.15, 12], [.49, 16], [.54, 11], [.75, 13], [.80, 22], [.86, 16], [.91, 12]],
 };
 
-function groveTree(index, balcony) {
+function groveTree(index, balcony, layout) {
+  const random = layout ? layoutRandom(layout.seed, index + 2) : undefined;
+  const shift = layout ? layout.groveShift[index % 3] + (random() - .5) * .05 : 0;
+  const size = random ? .85 + random() * .26 : 1;
   const anchors = balcony ? groves.balcony : groves.tree;
   if (index < anchors.length) {
     const [position, height] = anchors[index];
-    return pine(position, height, (height - 6) / 22);
+    return pine(position + shift, height * size, (height - 6) / 22);
   }
   // Add saplings around the same stands. Stagger rows without reshuffling on resize.
   const row = index - anchors.length;
@@ -67,32 +101,53 @@ function groveTree(index, balcony) {
   const depth = .09 + .77 * fraction(.38 + row * .618034);
   const spread = (fraction(.32 + row * .414214) - .5) * .14;
   const height = (8 + 18 * depth) * (.70 + .30 * fraction(.67 + row * .732051));
-  return pine(centers[row % centers.length] + spread, height, depth);
+  return pine(centers[row % centers.length] + spread + shift, height * size, depth);
 }
 
-// Reserve an occasional grove tree for a chalet. Draw the lots once per scene.
-function planChaletTrees() {
-  const plan = new Map();
-  for (let i = 0; i < village.length; i++) {
-    if (Math.random() >= .65) continue;
-    const treeIndex = i * 4 + Math.floor(Math.random() * 3);
-    const side = Math.random() < .5 ? -1 : 1;
-    plan.set(treeIndex, {houseIndex: i, offset: side * between(.92, 1.08), height: between(.48, .62)});
-  }
-  return plan;
+// The main doorstep and the two ends of a larger village each get a foreground pine.
+function planChaletTrees(random = Math.random) {
+  return Array.from({length: 3}, () => ({
+    side: random() < .5 ? -1 : 1, height: .63 + random() * .11,
+  }));
 }
 
 function chaletTree(house, placement) {
-  const height = house.style.ridge * house.scale * placement.height;
-  const tree = pine(house.position, height, house.depth + .14);
+  const height = Math.max(10 * house.villageScale, house.style.ridge * house.scale * placement.height);
+  const tree = pine(house.position, height, .90);
   tree.house = house;
   tree.houseScale = house.scale;
-  tree.facadeOffset = placement.offset * house.style.half * house.scale;
   return tree;
 }
 
-// The facade offset is in canvas pixels, just like the chalet's width.
-const treeX = (tree, width) => (tree.house?.position ?? tree.position) * width + (tree.facadeOffset ?? 0);
+const treeX = (tree, width) => tree.position * width;
+
+// Slide crowded trees along their grove until their crowns have a clear silhouette.
+// Only the layout pass uses these intervals. The animation keeps its original objects.
+function placeGroveTree(tree, target, width, occupied) {
+  const margin = Math.min(48, width * .13);
+  const radius = .34 * tree.height;
+  const start = Math.min(width / 2, margin + radius);
+  const end = width - start;
+  const preferred = Math.min(end, Math.max(start, target));
+  const blockers = occupied.map(([left, right]) => [left - radius, right + radius]);
+  const clearance = x => {
+    let gap = Infinity;
+    for (const [left, right] of blockers) gap = Math.min(gap, Math.max(left - x, x - right));
+    return gap;
+  };
+  let best = preferred;
+  if (clearance(preferred) < 0) {
+    let bestScore = -Infinity;
+    const steps = Math.min(220, Math.max(1, Math.ceil((end - start) / 2)));
+    for (let i = 0; i <= steps; i++) {
+      const x = start + (end - start) * i / steps;
+      const score = 1000 * Math.min(0, clearance(x)) - Math.abs(x - preferred);
+      if (score > bestScore) { best = x; bestScore = score; }
+    }
+  }
+  tree.position = best / width;
+  occupied.push([best - radius, best + radius]);
+}
 
 function sceneryCount(value, fallback, max) {
   if (value == null || String(value).trim() === '') return fallback;
@@ -127,7 +182,7 @@ function pine(position, height, depth) {
     }
     branches.push(...whorl.sort((a, b) => a.z - b.z));
   }
-  return {kind: 'tree', position, branches, height, depth, naturalDepth: depth, bend: 0, trunkBend: 0, velocity: 0, release: 0};
+  return {kind: 'tree', position, branches, height, depth, bend: 0, trunkBend: 0, velocity: 0, release: 0};
 }
 
 // The rooted trunk barely shifts; displacement increases towards the flexible crown.
@@ -160,7 +215,7 @@ function nightSky(balcony) {
 }
 
 class SnowScene {
-  constructor(canvas, balcony) {
+  constructor(canvas, balcony, defaultTreeSeed) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.flakes = [];
@@ -181,7 +236,8 @@ class SnowScene {
     this.windMode = windMode;
     this.houses = [];
     this.trees = [];
-    this.chaletTreePlan = planChaletTrees();
+    this.defaultTreePlan = planChaletTrees(defaultTreeSeed === undefined ? Math.random : layoutRandom(defaultTreeSeed, 1));
+    this.chaletTreePlan = this.defaultTreePlan;
     this.scenery = [];
     this.stars ??= nightSky(this.balcony);
     this.clouds ??= (this.balcony ? [[.22, .10, .68], [.46, .16, 1], [.62, .10, .60]]
@@ -190,35 +246,67 @@ class SnowScene {
     }));
   }
 
-  updateScenery(treeCount, houseCount, width) {
-    if (!width || (this.width === width && this.trees.length === treeCount && this.houses.length === houseCount)) return;
-    while (this.houses.length < houseCount) this.houses.push(chalet(this.houses.length, this.balcony));
+  updateScenery(treeCount, houseCount, width, housePosition, houseSize, houseClustering) {
+    if (!width || (this.width === width && this.trees.length === treeCount && this.houses.length === houseCount
+      && this.housePosition === housePosition && this.houseSize === houseSize && this.houseClustering === houseClustering)) return;
+    this.housePosition = housePosition;
+    this.houseSize = houseSize;
+    this.houseClustering = houseClustering;
+    while (this.houses.length < houseCount) this.houses.push(chalet(this.houses.length, this.balcony, this.layout));
     this.houses.length = houseCount;
-    placeChalets(this.houses, width);
+    placeChalets(this.houses, width, housePosition, houseSize, houseClustering);
+    const streets = [...this.houses].sort((a, b) => a.position - b.position);
+    const main = this.houses[0];
+    const left = streets[0], right = streets.at(-1);
+    const doors = [main, streets.length >= 3 ? left : null, streets.length >= 5 ? right : null];
+    const occupied = this.houses.map(h => {
+      const x = h.position * width, roof = h.eave * h.scale;
+      return [x - roof, x + roof];
+    });
+    this.trees.length = treeCount;
+    // Reserve the doorstep trees first so larger groups also leave space around them.
     for (let i = 0; i < treeCount; i++) {
-      const placement = this.chaletTreePlan.get(i);
-      const house = placement && this.houses[placement.houseIndex];
+      const slot = i / 4;
+      const house = doors[slot] ?? undefined;
       let tree = this.trees[i];
       if (!tree || tree.house !== house || tree.houseScale !== house?.scale) {
-        tree = this.trees[i] = house ? chaletTree(house, placement) : groveTree(i, this.balcony);
+        tree = this.trees[i] = house ? chaletTree(house, this.chaletTreePlan[slot]) : groveTree(i, this.balcony, this.layout);
+        tree.grovePosition = tree.position;
       }
-      // Allow the small corner pine in front. Place any grove that could cover
-      // the facade during a gust in a row behind that chalet instead.
-      tree.depth = tree.naturalDepth;
-      if (house) continue;
-      for (const neighbor of this.houses) {
-        const gap = Math.abs(treeX(tree, width) - neighbor.position * width);
-        if (gap <= neighbor.eave * neighbor.scale + tree.height * 1.1) {
-          tree.depth = Math.min(tree.depth, neighbor.depth - .02);
-        }
-      }
+      if (!house) continue;
+      const side = slot === 0 ? this.chaletTreePlan[slot].side : house === left ? -1 : 1;
+      const x = house.position * width + side * (house.style.half * house.scale + tree.height * .12);
+      tree.position = x / width;
+      occupied.push([x - tree.height * .38, x + tree.height * .38]);
     }
-    this.trees.length = treeCount;
+    for (let i = 0; i < treeCount; i++) {
+      const tree = this.trees[i];
+      if (tree.house) continue;
+      let target = tree.grovePosition * width;
+      if (main && i === 2) {
+        const edge = main.position > .5 ? left : right;
+        const side = main.position > .5 ? -1 : 1;
+        target = edge.position * width + side * (edge.eave * edge.scale + tree.height * .48);
+      }
+      placeGroveTree(tree, target, width, occupied);
+    }
     this.scenery = [...this.trees, ...this.houses].sort((a, b) => a.depth - b.depth);
   }
 
-  update({width, height, scale, visible, reduced, level, treeCount, houseCount}) {
-    this.updateScenery(sceneryCount(treeCount, this.balcony ? 4 : 7, 36), sceneryCount(houseCount, 1, village.length), width);
+  update({width, height, scale, visible, reduced, level, treeCount, houseCount, seed, wind, housePosition, houseSize, houseClustering, alwaysNight, alwaysSnowing, alwaysWindy, adjusting}) {
+    const layoutSeed = Number(seed) >>> 0;
+    if (layoutSeed !== (this.layout?.seed ?? 0)) {
+      const random = layoutRandom(layoutSeed, 0);
+      this.layout = layoutSeed ? {seed: layoutSeed, side: random() < .5 ? -1 : 1,
+        spacing: .97 + random() * .08, style: Math.floor(random() * chaletStyles.length),
+        groveShift: Array.from({length: 3}, () => (random() - .5) * .15)} : undefined;
+      this.chaletTreePlan = layoutSeed ? planChaletTrees(layoutRandom(layoutSeed, 1)) : this.defaultTreePlan;
+      this.trees = [];
+      this.houses = [];
+      this.scenery = [];
+    }
+    this.windMode = ['left', 'right', 'independent', 'shared'].includes(wind) ? wind : windMode;
+    this.updateScenery(sceneryCount(treeCount, this.balcony ? 4 : 7, 36), sceneryCount(houseCount, 1, village.length), width, housePosition, houseSize, houseClustering);
     if (this.width !== width || this.height !== height || this.scale !== scale) {
       this.width = width;
       this.height = height;
@@ -227,10 +315,13 @@ class SnowScene {
       this.canvas.height = Math.round(height * scale);
       if (width && height) this.ctx.setTransform(this.canvas.width / width, 0, 0, this.canvas.height / height, 0, 0);
     }
+    this.alwaysSnowing = alwaysSnowing;
+    this.alwaysWindy = alwaysWindy;
     this.reduced = reduced;
-    this.level = level;
-    this.sunTarget = level !== null && level > (this.balcony ? 50 : 0) ? 1 : 0;
-    if (this.daylight === undefined || reduced) this.daylight = this.sunTarget;
+    const previewDay = this.balcony && adjusting;
+    this.level = alwaysNight && !previewDay ? 0 : level;
+    this.sunTarget = alwaysNight ? Number(Boolean(previewDay)) : Number(level !== null && level > (this.balcony ? 50 : 0));
+    if (this.daylight === undefined || reduced || alwaysNight) this.daylight = this.sunTarget;
     const active = visible && width && height && !reduced;
     if (active && !this.frame) {
       this.last = performance.now();
@@ -528,7 +619,7 @@ class SnowScene {
     const ctx = this.ctx;
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.translate(treeX(tree, this.width), this.height - groundInset(tree.depth));
+    ctx.translate(treeX(tree, this.width), this.height - treeInset(tree));
     const offset = y => still ? 0 : crownOffset(tree, y);
     ctx.fillStyle = '#49635e';
     ctx.beginPath();
@@ -616,9 +707,9 @@ class SnowScene {
     const ctx = this.ctx;
     const {style, eave, chimneyTop} = house;
     ctx.save();
-    ctx.translate(this.width * house.position, this.height - groundInset(house.depth));
+    ctx.translate(this.width * house.position, this.height - chaletInset(house));
     ctx.scale(house.scale, house.scale);
-    ctx.fillStyle = this.daylight > .5 ? '#4d6070' : '#c6cdd0';
+    ctx.fillStyle = this.daylight > .5 ? '#89959d' : '#c6cdd0';
     for (const puff of house.smoke) {
       const age = puff.age / puff.life;
       const stretch = Math.min(1, Math.abs(puff.vx) / 32);
@@ -694,7 +785,7 @@ class SnowScene {
         const branch = loaded[Math.floor(Math.random() * loaded.length)];
         const along = between(.25, .35 + .65 * branch.snow);
         const y = branch.top + along * branch.drop;
-        const flake = this.flake(x + crownOffset(tree, y) + along * branch.x, this.height - groundInset(tree.depth) - 1 + y,
+        const flake = this.flake(x + crownOffset(tree, y) + along * branch.x, this.height - treeInset(tree) - 1 + y,
           between(.7, 1.35), tree.depth + along * branch.z * branch.span / 40);
         flake.vx = gust.direction * between(38, 62);
         flake.vy = between(1, 4);
@@ -709,7 +800,7 @@ class SnowScene {
     const travel = flake.x - oldX;
     for (const house of this.houses) {
       if (Math.abs(flake.depth - house.depth) >= .14) continue;
-      const base = this.height - groundInset(house.depth);
+      const base = this.height - chaletInset(house);
       const roofX = (flake.x - this.width * house.position) / house.scale;
       if (Math.abs(roofX) <= house.eave) {
         const side = Number(roofX > 0);
@@ -733,7 +824,7 @@ class SnowScene {
       }
     }
     for (const tree of this.trees) {
-      const base = this.height - groundInset(tree.depth);
+      const base = this.height - treeInset(tree);
       const dx = flake.x - treeX(tree, this.width) - crownOffset(tree, flake.y - base);
       if (Math.abs(dx) > tree.height * .42) continue;
       const dz = (flake.depth - tree.depth) * 40;
@@ -760,6 +851,7 @@ class SnowScene {
     const snowBand = .88 + .12 * Math.sin(this.elapsed / 7.5 + this.phase);
     this.blizzard = snowBand * smoothStep(peakAge / 15) * smoothStep(-easingAge / 22);
     this.cloudCover = smoothStep(age / stormBuildSeconds) * (1 - smoothStep(easingAge / stormEaseSeconds));
+    if (this.alwaysSnowing) this.cloudCover = Math.max(this.cloudCover, .58 + .04 * Math.sin(this.elapsed / 14 + this.phase));
     this.formCloudDeck();
     if (easingAge >= stormEaseSeconds) {
       this.stormAge = 0;
@@ -905,13 +997,14 @@ class SnowScene {
     const t = this.elapsed;
     const shower = this.snowfall(dt);
     // Hold the wind direction through the storm, including a scheduled lull.
-    if ((!this.gust && this.blizzard > 0) || (t >= this.nextGust && !this.blizzard)) this.startGust();
+    if ((!this.gust && (this.blizzard > 0 || this.alwaysWindy)) || (t >= this.nextGust && !this.blizzard)) this.startGust();
     const gust = this.gust;
     const progress = gust ? Math.min(1, (t - gust.start) / gust.duration) : 1;
     // Wind holds its direction through multiple surges before easing back to calm.
     const envelope = smoothStep(progress / .13) * smoothStep((1 - progress) / .18);
     const surge = Math.sin(t * .37 + this.phase);
-    const fairWind = envelope * (.78 + .15 * surge + .07 * Math.sin(t * .83));
+    const windFloor = this.alwaysWindy ? .56 + .07 * surge : 0;
+    const fairWind = windFloor + envelope * (.78 + .15 * surge + .07 * Math.sin(t * .83) - windFloor);
     const heading = windHeading(this.windMode, Date.now(), gust?.direction ?? 1);
     if (gust && heading) gust.direction = Math.sign(heading);
     const strength = (fairWind + this.blizzard * (.91 + .09 * surge - fairWind)) * Math.abs(heading);
@@ -1017,6 +1110,18 @@ class SnowScene {
     ctx.lineTo(this.width, this.height);
     ctx.fillStyle = '#a9c5d2';
     ctx.fill();
+    if (this.houses.length > 1) {
+      const main = this.houses[0];
+      const x = main.position * this.width;
+      const radius = Math.max(...this.houses.map(h => Math.abs(h.offset) * h.villageScale + h.eave * h.scale));
+      const crest = this.height - 1 - 9 * main.villageScale;
+      ctx.beginPath();
+      ctx.moveTo(x - radius - 18, this.height);
+      ctx.quadraticCurveTo(x - radius - 7, crest, x - radius, crest);
+      ctx.quadraticCurveTo(x, crest - 2, x + radius, crest);
+      ctx.quadraticCurveTo(x + radius + 7, crest, x + radius + 18, this.height);
+      ctx.fill();
+    }
     const flakes = still ? [] : this.flakes;
     let index = 0;
     for (const item of this.scenery) {
@@ -1033,12 +1138,14 @@ class SnowScene {
 if (typeof document === 'undefined') {
   let scene;
   self.onmessage = ({data}) => {
-    if (data.canvas) scene = new SnowScene(data.canvas, data.balcony);
+    if (data.canvas) scene = new SnowScene(data.canvas, data.balcony, data.defaultTreeSeed);
     scene.update(data);
   };
 } else if (!customElements.get('dashboard-christmas-snow')) {
+  // The editor may recreate a preview while browsing. Keep its original unseeded pines for this page visit.
+  const defaultTreeSeeds = new Map();
   class DashboardChristmasSnow extends HTMLElement {
-    static observedAttributes = ['data-light-level', 'data-trees', 'data-houses'];
+    static observedAttributes = ['data-light-level', 'data-trees', 'data-houses', 'data-seed', 'data-wind', 'data-house-position', 'data-house-size', 'data-house-clustering', 'data-always-night', 'data-always-snowing', 'data-always-windy'];
 
     constructor() {
       super();
@@ -1057,6 +1164,113 @@ if (typeof document === 'undefined') {
       });
     }
 
+    bindNightControls() {
+      const box = this.parentElement;
+      if (!box) return;
+      const root = this.getRootNode();
+      if (root instanceof ShadowRoot && !root.getElementById('christmas-night-style')) {
+        const style = document.createElement('style');
+        style.id = 'christmas-night-style';
+        style.textContent = `
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-controls="tinted"]) {
+            --christmas-control-alpha: .78;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow:is([data-controls="tinted"], [data-controls="solid"])) {
+            --christmas-control-bg: rgb(from var(--christmas-control-surface, var(--card-background-color, #252b33)) r g b / var(--christmas-control-alpha, 1));
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow:is([data-controls="tinted"], [data-controls="solid"]))
+            :is(.bubble-icon-container, .bubble-sub-button-1) {
+            z-index: 3 !important;
+            background: var(--christmas-control-bg) !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow:is([data-controls="tinted"], [data-controls="solid"])) .bubble-sub-button-1 {
+            color: var(--christmas-badge-text, var(--primary-text-color)) !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]) {
+            --christmas-control-surface: #263140;
+            --christmas-badge-text: #f3f6fb;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]:not([data-adjusting])) {
+            background: #202735 !important;
+            color: #f3f6fb;
+            --primary-text-color: #f3f6fb;
+            --secondary-text-color: #ccd4de;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]:not([data-adjusting]))
+            :is(.bubble-button-background, .bubble-range-fill, .bubble-range-value) { opacity: 0 !important; }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]:not([data-adjusting])) .bubble-sub-button-1 {
+            background: var(--christmas-control-bg, #304056) !important; color: #f3f6fb !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]) .bubble-icon-container {
+            background: var(--christmas-control-bg, #263140) !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]) .bubble-icon {
+            color: #aab4c0 !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"][data-on]) .bubble-icon {
+            color: #ffd480 !important;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]) .bubble-sub-button-1[data-drag-percent] .bubble-sub-button-name-container {
+            display: none;
+          }
+          .bubble-button-card-container:has(> dashboard-christmas-snow[data-always-night="true"]) .bubble-sub-button-1[data-drag-percent]::after {
+            content: attr(data-drag-percent) !important;
+          }`;
+        root.append(style);
+      }
+      if (this.dataset.place !== 'balcony') return;
+      this.interactions = new AbortController();
+      const options = {signal: this.interactions.signal, capture: true, passive: true};
+      const hoverOptions = {signal: this.interactions.signal, passive: true};
+      box.addEventListener('pointerenter', event => {
+        if (event.pointerType === 'mouse' && !event.buttons) this.showAdjustment();
+      }, hoverOptions);
+      box.addEventListener('pointerleave', () => {
+        if (this.dragPointer == null) this.endAdjustment();
+      }, hoverOptions);
+      box.addEventListener('pointerdown', event => {
+        if (this.dataset.alwaysNight !== 'true' || !event.isPrimary || event.button !== 0
+          || event.target.closest?.('.bubble-icon-container,.bubble-sub-button-container')) return;
+        this.dragPointer = event.pointerId;
+        this.showAdjustment();
+        const fill = box.querySelector('.bubble-range-fill');
+        const badge = box.querySelector('.bubble-sub-button-1');
+        if (!fill || !badge) return;
+        const readLevel = () => {
+          const match = /^translateX\(([-.\d]+)%\)$/.exec(fill.style.transform);
+          if (match) badge.dataset.dragPercent = Math.round(Math.max(0, Math.min(100, Number(match[1])))) + '%';
+        };
+        this.dragObserver?.disconnect();
+        this.dragObserver = new MutationObserver(readLevel);
+        this.dragObserver.observe(fill, {attributes: true, attributeFilter: ['style']});
+        readLevel();
+      }, options);
+      const released = event => {
+        if (event.pointerId === this.dragPointer) this.endAdjustment();
+      };
+      for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) window.addEventListener(type, released, options);
+      window.addEventListener('blur', () => this.endAdjustment(), options);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) this.endAdjustment();
+      }, options);
+    }
+
+    showAdjustment() {
+      if (this.dataset.alwaysNight !== 'true' || this.hasAttribute('data-adjusting')) return;
+      this.setAttribute('data-adjusting', '');
+      this.sync();
+    }
+
+    endAdjustment() {
+      this.dragPointer = undefined;
+      this.dragObserver?.disconnect();
+      this.parentElement?.querySelector('.bubble-sub-button-1[data-drag-percent]')?.removeAttribute('data-drag-percent');
+      if (this.hasAttribute('data-adjusting')) {
+        this.removeAttribute('data-adjusting');
+        if (this.isConnected) this.sync();
+      }
+    }
+
     createCanvas() {
       const canvas = document.createElement('canvas');
       canvas.style.cssText = 'display:block;width:100%;height:100%';
@@ -1065,7 +1279,11 @@ if (typeof document === 'undefined') {
     }
 
     connectedCallback() {
+      this.bindNightControls();
       this.balcony = this.dataset.place === 'balcony';
+      const cardKey = this.getRootNode().host?.config?.entity ?? this.dataset.place;
+      if (!defaultTreeSeeds.has(cardKey)) defaultTreeSeeds.set(cardKey, Math.floor(Math.random() * 0x100000000));
+      this.defaultTreeSeed = defaultTreeSeeds.get(cardKey);
       const canvas = this.createCanvas();
       if (typeof Worker !== 'undefined' && canvas.transferControlToOffscreen) {
         try {
@@ -1075,12 +1293,12 @@ if (typeof document === 'undefined') {
             if (this.worker === worker) this.useLocalCanvas();
           };
           const offscreen = canvas.transferControlToOffscreen();
-          worker.postMessage({...this.state(), balcony: this.balcony, canvas: offscreen}, [offscreen]);
+          worker.postMessage({...this.state(), balcony: this.balcony, defaultTreeSeed: this.defaultTreeSeed, canvas: offscreen}, [offscreen]);
         } catch {
           this.useLocalCanvas();
         }
       } else {
-        this.scene = new SnowScene(canvas, this.balcony);
+        this.scene = new SnowScene(canvas, this.balcony, this.defaultTreeSeed);
       }
       this.viewport.observe(this);
       this.resize.observe(this);
@@ -1092,7 +1310,7 @@ if (typeof document === 'undefined') {
     useLocalCanvas() {
       this.worker?.terminate();
       this.worker = undefined;
-      this.scene = new SnowScene(this.createCanvas(), this.balcony);
+      this.scene = new SnowScene(this.createCanvas(), this.balcony, this.defaultTreeSeed);
       this.sync();
     }
 
@@ -1100,7 +1318,10 @@ if (typeof document === 'undefined') {
       const value = Number.parseFloat(this.dataset.lightLevel);
       return {width: this.width, height: this.height, scale: Math.min(devicePixelRatio || 1, 2),
         visible: Boolean(this.isConnected && this.visible && !document.hidden),
-        treeCount: this.dataset.trees, houseCount: this.dataset.houses,
+        treeCount: this.dataset.trees, houseCount: this.dataset.houses, seed: this.dataset.seed, wind: this.dataset.wind,
+        housePosition: this.dataset.housePosition, houseSize: this.dataset.houseSize, houseClustering: this.dataset.houseClustering,
+        alwaysSnowing: this.dataset.alwaysSnowing === 'true', alwaysWindy: this.dataset.alwaysWindy === 'true',
+        alwaysNight: this.dataset.alwaysNight === 'true', adjusting: this.hasAttribute('data-adjusting'),
         reduced: this.motion.matches, level: Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null};
     }
 
@@ -1110,11 +1331,14 @@ if (typeof document === 'undefined') {
       else this.scene?.update(state);
     }
 
-    attributeChangedCallback() {
+    attributeChangedCallback(name) {
+      if (name === 'data-always-night' && this.dataset.alwaysNight !== 'true') this.endAdjustment();
       if (this.isConnected) this.sync();
     }
 
     disconnectedCallback() {
+      this.interactions?.abort();
+      this.endAdjustment();
       this.viewport.disconnect();
       this.resize.disconnect();
       this.motion.removeEventListener('change', this.sync);
@@ -1127,4 +1351,203 @@ if (typeof document === 'undefined') {
     }
   }
   customElements.define('dashboard-christmas-snow', DashboardChristmasSnow);
+}
+
+// Keep the native Bubble Card editor and its normal HA draft/save lifecycle.
+if (typeof document !== 'undefined') {
+  customElements.whenDefined('bubble-card').then(() => {
+    const bubble = customElements.get('bubble-card');
+    const nativeEditor = bubble.getConfigElement;
+    if (!nativeEditor || nativeEditor.christmasScenery) return;
+    function getConfigElement(...args) {
+      const editor = nativeEditor.apply(this, args);
+      const updated = editor.updated;
+      editor.updated = function(changes) {
+        updated?.call(this, changes);
+        syncChristmasEditor(this);
+      };
+      return editor;
+    }
+    getConfigElement.christmasScenery = true;
+    bubble.getConfigElement = getConfigElement;
+  });
+}
+
+const windOptions = [
+  {value: 'inherit', label: 'Use dashboard wind setting'},
+  {value: 'shared', label: 'Shared direction'},
+  {value: 'left', label: 'Blow left'},
+  {value: 'right', label: 'Blow right'},
+  {value: 'independent', label: 'Independent direction'},
+];
+const numberField = (name, label, min, max) => ({name, label, selector: {number: {min, max, step: 1, mode: 'box'}}});
+const treeField = numberField('christmas_trees', 'Number of trees', 0, 36);
+const houseField = numberField('christmas_houses', 'Number of chalets', 0, village.length);
+const choices = (name, label, options) => ({name, label, selector: {select: {mode: 'dropdown',
+  options: options.map(([value, label]) => ({value, label}))}}});
+const positionField = choices('christmas_house_position', 'Chalet placement',
+  [['left', 'Left'], ['center', 'Center'], ['right', 'Right'], ['spread', 'Spread within the village']]);
+const clusteringField = choices('christmas_house_clustering', 'Chalet clustering',
+  [['tight', 'Tight'], ['normal', 'Normal'], ['loose', 'Loose']]);
+const sizeField = choices('christmas_house_size', 'Chalet size',
+  [['smaller', 'Smaller'], ['normal', 'Normal'], ['bigger', 'Bigger']]);
+const controlsField = choices('christmas_controls', 'Icon and badge appearance',
+  [['default', 'Default'], ['tinted', 'Tinted foreground'], ['solid', 'Solid foreground']]);
+const toggle = (name, label) => ({name, label, selector: {boolean: {}}});
+const nightField = toggle('christmas_always_night', 'Always night');
+const snowField = toggle('christmas_always_snowing', 'Always snowing');
+const windyField = toggle('christmas_always_windy', 'Always windy');
+const windField = {name: 'christmas_wind', label: 'Wind direction', selector: {select: {options: windOptions, mode: 'dropdown'}}};
+const twilightField = numberField('twilightWidth', 'Twilight edge width', 0, 10);
+const helperField = {name: 'twilightHelper', label: 'Twilight number helper (optional)', selector: {entity: {domain: 'input_number'}}};
+const seedField = numberField('christmas_seed', 'Layout seed (optional)', 1, 2147483647);
+
+function updateChristmasDraft(editor, edits) {
+  const config = {...editor._config};
+  for (const [key, value] of Object.entries(edits)) {
+    if (value == null || value === '' || value === 'inherit') delete config[key];
+    else config[key] = value;
+  }
+  editor.setConfig(config);
+  editor.dispatchEvent(new CustomEvent('config-changed', {detail: {config}, bubbles: true, composed: true}));
+}
+
+function christmasEditorData(config) {
+  const slider = config.button_type === 'slider';
+  const helper = typeof config.christmas_twilight === 'string' && config.christmas_twilight.startsWith('input_number.');
+  const data = {christmas_trees: config.christmas_trees ?? (slider ? 4 : 7), christmas_houses: config.christmas_houses ?? 1,
+    christmas_house_position: config.christmas_house_position || 'center', christmas_house_size: config.christmas_house_size || 'normal',
+    christmas_controls: config.christmas_controls || 'default',
+    christmas_house_clustering: config.christmas_house_clustering || 'normal',
+    christmas_always_night: String(config.christmas_always_night) === 'true',
+    christmas_always_snowing: String(config.christmas_always_snowing) === 'true',
+    christmas_always_windy: String(config.christmas_always_windy) === 'true',
+    christmas_wind: config.christmas_wind || 'inherit', christmas_seed: config.christmas_seed};
+  if (slider) {
+    if (!helper) data.twilightWidth = config.christmas_twilight ?? 6;
+    data.twilightHelper = helper ? config.christmas_twilight : undefined;
+  }
+  return data;
+}
+
+const sceneryVersion = 'v1.0.2';
+
+function layoutHistory(editor) {
+  const seed = editor._config.christmas_seed;
+  let history = editor.christmasLayoutHistory;
+  // A seed entered manually starts a new browsing session at that layout.
+  if (!history || history.seeds[history.index] !== seed) {
+    history = editor.christmasLayoutHistory = {seeds: [seed], index: 0};
+  }
+  return history;
+}
+
+function createChristmasPanel(editor) {
+  const panel = document.createElement('ha-expansion-panel');
+  panel.id = 'christmas-scenery-settings';
+  panel.setAttribute('outlined', '');
+  panel.innerHTML = `
+    <h4 slot="header"><ha-icon icon="mdi:pine-tree"></ha-icon> Christmas scenery</h4>
+    <div class="content" style="display:grid;gap:12px">
+      <ha-form></ha-form>
+      <div style="display:grid;grid-template-columns:40px auto 40px;align-items:center;gap:4px;justify-self:start">
+        <button type="button" data-previous aria-label="Previous layout" title="Previous layout" hidden
+          style="grid-column:1;background:transparent;color:var(--primary-text-color);border:0;min-height:40px;cursor:pointer">
+          <ha-icon icon="mdi:chevron-left" aria-hidden="true"></ha-icon>
+        </button>
+        <ha-button data-shuffle style="grid-column:2"><ha-icon slot="icon" icon="mdi:shuffle-variant"></ha-icon>Shuffle layout</ha-button>
+        <button type="button" data-next aria-label="Next layout" title="Next layout" hidden
+          style="grid-column:3;background:transparent;color:var(--primary-text-color);border:0;min-height:40px;cursor:pointer">
+          <ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>
+        </button>
+      </div>
+      <small>Shuffle to try another layout. Use the arrows to revisit layouts from this editing session. Select Save to keep the one in the preview.</small>
+      <details>
+        <summary style="display:flex;align-items:center;gap:8px;min-height:36px;cursor:pointer">
+          <ha-icon icon="mdi:help-circle-outline" aria-hidden="true"></ha-icon>
+          About Christmas Bubble Cards
+          <span style="margin-inline-start:auto;padding:2px 9px;border-radius:12px;background:var(--secondary-background-color);color:var(--primary-text-color);font-size:0.85em;white-space:nowrap">${sceneryVersion}</span>
+        </summary>
+        <ha-alert alert-type="info">
+          Visit <a href="https://github.com/bassie661/christmas-bubble" target="_blank" rel="noopener noreferrer">Christmas Bubble Cards on GitHub</a> for setup instructions, examples and releases.
+        </ha-alert>
+      </details>
+      <details><summary style="cursor:pointer">Scenery settings help</summary>
+        <p>Choose 0–36 trees and 0–8 chalets. Zero hides that group. Pines form groves beside the village, with smaller trees in front of chalet corners. Foreground trees count toward your total. Left, Center and Right move the whole village. Left and Right keep every roof in the selected outer third. Smaller chalets sit uphill between the nearer roofs. Spread gives the chalets a little more space within the village. Chalet clustering controls the gap between neighbors. Tight overlaps the roofs more, Normal keeps the usual spacing and Loose leaves more room within the selected area. Smaller reduces chalet size by 22% and Bigger increases it by up to 10%, as space allows.</p>
+        <p>Use the dashboard wind setting to follow the animation resource. Shared wind turns with the other cards. Left and right fix the direction. Independent wind follows this button’s own gusts.</p>
+        <p>Icon and badge appearance affects the main icon and the percentage badge when present. Default uses the usual card styling. Tinted foreground shows some scenery through the backgrounds. Solid foreground hides the scenery behind them.</p>
+        <p>Always night keeps the sky dark while the icon shows whether the device is on or off.</p>
+        <p>Always snowing keeps flakes falling between snowstorms. Always windy keeps the trees, smoke and drifting snow moving in the selected wind direction between gusts. You can use either setting on its own or both together.</p>
+        <p data-twilight-help>In Always night mode, hovering over the dimmer or dragging it reveals the slider and daylight. Releasing the slider restores the night sky. The percentage badge stays visible. The twilight edge blends the slider fill into the sky. Choose 0 for a sharp edge or 10 for the widest blend. A Number helper can control the width. Clear the helper to use a fixed width.</p>
+        <p>Shuffle layout keeps your counts and picks new tree positions and chalet arrangements. The seed identifies the arrangement. Use the same seed, counts and button type to reproduce it.</p>
+      </details>
+    </div>`;
+  const form = panel.querySelector('ha-form');
+  form.computeLabel = field => field.label;
+  form.addEventListener('value-changed', event => {
+    event.stopPropagation();
+    const next = event.detail.value;
+    const previous = christmasEditorData(editor._config);
+    const edits = {};
+    for (const {name} of form.schema) {
+      const value = next[name];
+      if (value === previous[name]) continue;
+      if (name === 'twilightHelper') edits.christmas_twilight = value || 6;
+      else if (name === 'twilightWidth') edits.christmas_twilight = value;
+      else edits[name] = value;
+    }
+    if (Object.keys(edits).length) updateChristmasDraft(editor, edits);
+  });
+  function selectLayout(history, index) {
+    history.index = index;
+    updateChristmasDraft(editor, {christmas_seed: history.seeds[index]});
+  }
+  panel.querySelector('[data-shuffle]').addEventListener('click', () => {
+    const history = layoutHistory(editor);
+    let seed = 1 + Math.floor(Math.random() * 2147483647);
+    while (history.seeds.some(value => Number(value) === seed)) seed = seed % 2147483647 + 1;
+    history.seeds.push(seed);
+    selectLayout(history, history.seeds.length - 1);
+  });
+  for (const [selector, step] of [['[data-previous]', -1], ['[data-next]', 1]]) {
+    panel.querySelector(selector).addEventListener('click', () => {
+      const history = layoutHistory(editor);
+      const index = history.index + step;
+      if (index >= 0 && index < history.seeds.length) selectLayout(history, index);
+    });
+  }
+  return panel;
+}
+
+function syncChristmasEditor(editor) {
+  const root = editor.shadowRoot;
+  const config = editor._config;
+  if (!root) return;
+  let panel = root.getElementById('christmas-scenery-settings');
+  if (config?.card_type !== 'button' || !config.styles?.includes?.('dashboard-christmas-snow')) {
+    panel?.remove();
+    return;
+  }
+  const anchor = root.querySelector('ha-expansion-panel:not(#christmas-scenery-settings)');
+  if (!anchor) return;
+  if (!panel) {
+    panel = createChristmasPanel(editor);
+    anchor.after(panel);
+  }
+  const slider = config.button_type === 'slider';
+  const history = layoutHistory(editor);
+  panel.querySelector('[data-previous]').hidden = history.index === 0;
+  panel.querySelector('[data-next]').hidden = history.index === history.seeds.length - 1;
+  const data = christmasEditorData(config);
+  const form = panel.querySelector('ha-form');
+  const schema = [treeField, houseField, positionField, clusteringField, sizeField, windField, nightField, snowField, windyField, controlsField];
+  if (slider) {
+    if (!data.twilightHelper) schema.push(twilightField);
+    schema.push(helperField);
+  }
+  schema.push(seedField);
+  if (!form.schema || schema.length !== form.schema.length || schema.some((field, i) => field !== form.schema[i])) form.schema = schema;
+  form.hass = editor.hass;
+  if (!form.data || schema.some(({name}) => form.data[name] !== data[name])) form.data = data;
+  panel.querySelector('[data-twilight-help]').hidden = !slider;
 }

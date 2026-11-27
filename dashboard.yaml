@@ -51,10 +51,12 @@ cards:
           snow.setAttribute("aria-hidden", "true");
           box.append(snow);
         }
-        for (const key of ["trees", "houses"]) {
-          const count = String(this.config["christmas_" + key] ?? "");
-          if (snow.dataset[key] !== count) snow.dataset[key] = count;
+        for (const key of ["trees", "houses", "seed", "wind", "house_position", "house_size", "house_clustering", "always_night", "always_snowing", "always_windy", "controls"]) {
+          const setting = String(this.config["christmas_" + key] ?? "");
+          const attr = "data-" + key.replaceAll("_", "-");
+          if (snow.getAttribute(attr) !== setting) snow.setAttribute(attr, setting);
         }
+        snow.toggleAttribute("data-on", hass.states[this.config.entity]?.state === "on");
         const light = hass.states[this.config.entity];
         const level = light?.state === "on" ? String(Math.round((light.attributes.brightness ?? 255) * 100 / 255))
           : light?.state === "off" ? "0" : "";
@@ -113,10 +115,12 @@ cards:
           snow.setAttribute("aria-hidden", "true");
           box.append(snow);
         }
-        for (const key of ["trees", "houses"]) {
-          const count = String(this.config["christmas_" + key] ?? "");
-          if (snow.dataset[key] !== count) snow.dataset[key] = count;
+        for (const key of ["trees", "houses", "seed", "wind", "house_position", "house_size", "house_clustering", "always_night", "always_snowing", "always_windy", "controls"]) {
+          const setting = String(this.config["christmas_" + key] ?? "");
+          const attr = "data-" + key.replaceAll("_", "-");
+          if (snow.getAttribute(attr) !== setting) snow.setAttribute(attr, setting);
         }
+        snow.toggleAttribute("data-on", hass.states[this.config.entity]?.state === "on");
         const state = hass.states[this.config.entity]?.state;
         const level = state === "on" ? "100" : state === "off" ? "0" : "";
         if (snow.getAttribute("data-light-level") !== level) snow.setAttribute("data-light-level", level);

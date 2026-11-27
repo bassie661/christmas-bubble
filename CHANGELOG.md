@@ -1,5 +1,15 @@
 # Christmas Bubble Cards release notes
 
+## v1.0.2
+
+- Customize each button in the new **Christmas scenery** editor. Set tree and chalet counts, wind direction and slider twilight. Built-in help includes the installed version and a GitHub link.
+- **Shuffle layout** previews a new village. Use the arrows to revisit layouts from the current editing session, then save your favorite.
+- Choose chalet placement, size and spacing. Left and Right keep the whole village on the chosen side. Pines form groves along its edges, with smaller trees in front of chalet corners.
+- **Always night** keeps the scene dark while the icon shows the device state. Hover over or drag the dimmer to reveal daylight and the slider fill. The percentage badge stays visible.
+- **Always snowing** and **Always windy** work independently per button, including between storms and gusts. Chimney smoke appears lighter in daylight.
+- Keep the default icon and badge styling, or bring both controls above the scenery with tinted or solid backgrounds.
+- The animated previews show six seconds at 30 fps, matching the dashboard animation target.
+
 ## v1.0.1
 
 - Each button supports `christmas_trees` (0–36) and `christmas_houses` (0–8) in YAML. Set either count to zero to hide it.
