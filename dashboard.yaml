@@ -4,6 +4,8 @@ cards:
     card_type: button
     button_type: slider
     entity: light.christmas_lights
+    christmas_trees: 9
+    christmas_houses: 2
     name: Christmas lights
     icon: mdi:string-lights
     force_icon: true
@@ -49,6 +51,10 @@ cards:
           snow.setAttribute("aria-hidden", "true");
           box.append(snow);
         }
+        for (const key of ["trees", "houses"]) {
+          const count = String(this.config["christmas_" + key] ?? "");
+          if (snow.dataset[key] !== count) snow.dataset[key] = count;
+        }
         const light = hass.states[this.config.entity];
         const level = light?.state === "on" ? String(Math.round((light.attributes.brightness ?? 255) * 100 / 255))
           : light?.state === "off" ? "0" : "";
@@ -82,6 +88,8 @@ cards:
     card_type: button
     button_type: switch
     entity: switch.christmas_tree
+    christmas_trees: 16
+    christmas_houses: 3
     name: Christmas tree
     icon: mdi:pine-tree
     force_icon: true
@@ -104,6 +112,10 @@ cards:
           snow.dataset.place = "tree";
           snow.setAttribute("aria-hidden", "true");
           box.append(snow);
+        }
+        for (const key of ["trees", "houses"]) {
+          const count = String(this.config["christmas_" + key] ?? "");
+          if (snow.dataset[key] !== count) snow.dataset[key] = count;
         }
         const state = hass.states[this.config.entity]?.state;
         const level = state === "on" ? "100" : state === "off" ? "0" : "";

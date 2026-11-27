@@ -2,6 +2,8 @@ type: custom:bubble-card
 card_type: button
 button_type: switch
 entity: switch.christmas_tree
+christmas_trees: 16
+christmas_houses: 3
 name: Christmas tree
 icon: mdi:pine-tree
 force_icon: true
@@ -24,6 +26,10 @@ styles: |
       snow.dataset.place = "tree";
       snow.setAttribute("aria-hidden", "true");
       box.append(snow);
+    }
+    for (const key of ["trees", "houses"]) {
+      const count = String(this.config["christmas_" + key] ?? "");
+      if (snow.dataset[key] !== count) snow.dataset[key] = count;
     }
     const state = hass.states[this.config.entity]?.state;
     const level = state === "on" ? "100" : state === "off" ? "0" : "";

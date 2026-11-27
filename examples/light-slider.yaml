@@ -2,6 +2,8 @@ type: custom:bubble-card
 card_type: button
 button_type: slider
 entity: light.christmas_lights
+christmas_trees: 9
+christmas_houses: 2
 name: Christmas lights
 icon: mdi:string-lights
 force_icon: true
@@ -46,6 +48,10 @@ styles: |
       snow.dataset.place = "balcony";
       snow.setAttribute("aria-hidden", "true");
       box.append(snow);
+    }
+    for (const key of ["trees", "houses"]) {
+      const count = String(this.config["christmas_" + key] ?? "");
+      if (snow.dataset[key] !== count) snow.dataset[key] = count;
     }
     const light = hass.states[this.config.entity];
     const level = light?.state === "on" ? String(Math.round((light.attributes.brightness ?? 255) * 100 / 255))

@@ -16,7 +16,89 @@ function windHeading(mode, now, localDirection) {
   return direction * smoothStep(Math.min(phase, period - phase) / 3500);
 }
 const maxDriftDepth = 12;
-const cottageHalfWidth = 8.5;
+// Back-row silhouettes share a higher snow line and project smaller on the button.
+const groundInset = depth => 1 + (1 - depth) * 6;
+const chaletStyles = [
+  {wall: '#885f46', half: 8.5, ridge: 20, lamp: '#ffda85', chimneyX: 5.1},
+  {wall: '#b69578', half: 10, ridge: 19, lamp: '#ffdca1', chimneyX: -5.8},
+  {wall: '#795747', half: 8, ridge: 22, lamp: '#ffbe74', chimneyX: 4.4},
+  {wall: '#b5a28b', half: 9.5, ridge: 21, lamp: '#ffe4ab', chimneyX: -4.8},
+];
+
+// The largest chalet anchors the village. Smaller chalets alternate on either side.
+const village = [[0, .78], [-1, .47], [1, .44], [-2, .31],
+  [2, .29], [-3, .17], [3, .15], [-4, .08]];
+
+function chalet(index, balcony) {
+  const [lane, depth] = village[index];
+  const style = chaletStyles[index % chaletStyles.length];
+  const smokePeriod = between(112, 158);
+  return {kind: 'house', lane, depth,
+    naturalScale: (.48 + depth * .98) * (balcony ? .88 : 1), style, balconyRail: index % 3 === 1,
+    eave: style.half + 2.5, chimneyTop: -style.ridge - 3, snow: [.22, .22],
+    smoke: [], smokePeriod, smokeAge: between(0, smokePeriod), smokeCredit: 0};
+}
+
+function placeChalets(houses, width) {
+  // Reserve room for the outermost roof. On narrow buttons the whole village fits to scale.
+  const outerLane = Math.ceil((houses.length - 1) / 2);
+  const spacing = Math.min(Math.max(28, Math.min(42, width * .08)), width * .47 / (outerLane + .5));
+  for (const house of houses) {
+    house.position = .5 + house.lane * spacing / width;
+    house.scale = house.naturalScale * Math.min(1, spacing / 28);
+  }
+}
+
+const groves = {
+  balcony: [[.22, 12], [.52, 16], [.69, 23], [.73, 12]],
+  tree: [[.15, 12], [.49, 16], [.54, 11], [.75, 13], [.80, 22], [.86, 16], [.91, 12]],
+};
+
+function groveTree(index, balcony) {
+  const anchors = balcony ? groves.balcony : groves.tree;
+  if (index < anchors.length) {
+    const [position, height] = anchors[index];
+    return pine(position, height, (height - 6) / 22);
+  }
+  // Add saplings around the same stands. Stagger rows without reshuffling on resize.
+  const row = index - anchors.length;
+  const centers = balcony ? [.22, .51, .75] : [.18, .47, .84];
+  const fraction = value => value - Math.floor(value);
+  const depth = .09 + .77 * fraction(.38 + row * .618034);
+  const spread = (fraction(.32 + row * .414214) - .5) * .14;
+  const height = (8 + 18 * depth) * (.70 + .30 * fraction(.67 + row * .732051));
+  return pine(centers[row % centers.length] + spread, height, depth);
+}
+
+// Reserve an occasional grove tree for a chalet. Draw the lots once per scene.
+function planChaletTrees() {
+  const plan = new Map();
+  for (let i = 0; i < village.length; i++) {
+    if (Math.random() >= .65) continue;
+    const treeIndex = i * 4 + Math.floor(Math.random() * 3);
+    const side = Math.random() < .5 ? -1 : 1;
+    plan.set(treeIndex, {houseIndex: i, offset: side * between(.92, 1.08), height: between(.48, .62)});
+  }
+  return plan;
+}
+
+function chaletTree(house, placement) {
+  const height = house.style.ridge * house.scale * placement.height;
+  const tree = pine(house.position, height, house.depth + .14);
+  tree.house = house;
+  tree.houseScale = house.scale;
+  tree.facadeOffset = placement.offset * house.style.half * house.scale;
+  return tree;
+}
+
+// The facade offset is in canvas pixels, just like the chalet's width.
+const treeX = (tree, width) => (tree.house?.position ?? tree.position) * width + (tree.facadeOffset ?? 0);
+
+function sceneryCount(value, fallback, max) {
+  if (value == null || String(value).trim() === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(max, Math.floor(number))) : fallback;
+}
 const snowHeightScale = 2 / 3;
 const cloudHeightScale = 2 / 3;
 
@@ -30,7 +112,7 @@ function airGustAt(x, center, strength, gust) {
 }
 
 // Project each whorl of boughs onto the button. Positive z points towards the viewer.
-function pine(position, height) {
+function pine(position, height, depth) {
   const branches = [];
   for (let tier = 0; tier < 3; tier++) {
     const span = height * (.38 - .075 * tier);
@@ -45,12 +127,14 @@ function pine(position, height) {
     }
     branches.push(...whorl.sort((a, b) => a.z - b.z));
   }
-  return {position, branches, height, depth: .30 + height / 95, bend: 0, velocity: 0, release: 0};
+  return {kind: 'tree', position, branches, height, depth, naturalDepth: depth, bend: 0, trunkBend: 0, velocity: 0, release: 0};
 }
 
 // The rooted trunk barely shifts; displacement increases towards the flexible crown.
-function crownOffset(tree, y, bend = tree.bend) {
+function crownOffset(tree, y) {
   const height = Math.max(0, -y);
+  const crown = smoothStep((height / tree.height - .65) / .31);
+  const bend = tree.trunkBend + crown * (tree.bend - tree.trunkBend);
   return bend * height * height / tree.height;
 }
 
@@ -95,23 +179,46 @@ class SnowScene {
     this.draw = this.draw.bind(this);
     this.balcony = balcony;
     this.windMode = windMode;
-    this.cottage = {position: balcony ? .605 : .65, scale: balcony ? .88 : 1, snow: [.22, .22]};
-    this.smoke = [];
-    this.smokePeriod = between(112, 158);
-    this.smokeAge = between(0, this.smokePeriod);
-    this.smokeCredit = 0;
+    this.houses = [];
+    this.trees = [];
+    this.chaletTreePlan = planChaletTrees();
+    this.scenery = [];
     this.stars ??= nightSky(this.balcony);
     this.clouds ??= (this.balcony ? [[.22, .10, .68], [.46, .16, 1], [.62, .10, .60]]
       : [[.43, .12, .77], [.68, .16, .92]]).map(([position, height, size]) => ({
       position, height, size, offset: 0, wind: 0, phase: between(0, 2 * Math.PI),
     }));
-    this.trees ??= this.balcony
-      ? [pine(.22, 12), pine(.52, 16), pine(.69, 23), pine(.73, 12)]
-      : [pine(.15, 12), pine(.49, 16), pine(.54, 11), pine(.75, 13), pine(.80, 22), pine(.86, 16), pine(.91, 12)];
-    this.trees.sort((a, b) => a.depth - b.depth);
   }
 
-  update({width, height, scale, visible, reduced, level}) {
+  updateScenery(treeCount, houseCount, width) {
+    if (!width || (this.width === width && this.trees.length === treeCount && this.houses.length === houseCount)) return;
+    while (this.houses.length < houseCount) this.houses.push(chalet(this.houses.length, this.balcony));
+    this.houses.length = houseCount;
+    placeChalets(this.houses, width);
+    for (let i = 0; i < treeCount; i++) {
+      const placement = this.chaletTreePlan.get(i);
+      const house = placement && this.houses[placement.houseIndex];
+      let tree = this.trees[i];
+      if (!tree || tree.house !== house || tree.houseScale !== house?.scale) {
+        tree = this.trees[i] = house ? chaletTree(house, placement) : groveTree(i, this.balcony);
+      }
+      // Allow the small corner pine in front. Place any grove that could cover
+      // the facade during a gust in a row behind that chalet instead.
+      tree.depth = tree.naturalDepth;
+      if (house) continue;
+      for (const neighbor of this.houses) {
+        const gap = Math.abs(treeX(tree, width) - neighbor.position * width);
+        if (gap <= neighbor.eave * neighbor.scale + tree.height * 1.1) {
+          tree.depth = Math.min(tree.depth, neighbor.depth - .02);
+        }
+      }
+    }
+    this.trees.length = treeCount;
+    this.scenery = [...this.trees, ...this.houses].sort((a, b) => a.depth - b.depth);
+  }
+
+  update({width, height, scale, visible, reduced, level, treeCount, houseCount}) {
+    this.updateScenery(sceneryCount(treeCount, this.balcony ? 4 : 7, 36), sceneryCount(houseCount, 1, village.length), width);
     if (this.width !== width || this.height !== height || this.scale !== scale) {
       this.width = width;
       this.height = height;
@@ -136,9 +243,7 @@ class SnowScene {
       if (visible && width && height && reduced) {
         this.daylight = this.sunTarget;
         this.drawSky();
-        this.drawCottage();
-        for (const tree of this.trees) this.drawTree(tree, true);
-        this.drawGround();
+        this.drawLandscape(true);
       }
     }
   }
@@ -413,7 +518,7 @@ class SnowScene {
     const tree = this.trees[Math.floor(Math.random() * this.trees.length)];
     this.gust = {
       start: this.elapsed, duration: this.balcony ? between(70, 100) : between(60, 90),
-      origin: tree.position * this.width, reach: this.width * between(.13, .25),
+      origin: tree ? treeX(tree, this.width) : Math.random() * this.width, reach: this.width * between(.13, .25),
       radius: between(34, this.balcony ? 58 : 47), direction, lifted: 0
     };
     this.nextGust = this.elapsed + this.gust.duration + between(15, this.balcony ? 30 : 38);
@@ -423,9 +528,8 @@ class SnowScene {
     const ctx = this.ctx;
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.translate(this.width * tree.position, this.height - 4 * snowHeightScale);
-    const bend = still ? 0 : tree.bend;
-    const offset = y => crownOffset(tree, y, bend);
+    ctx.translate(treeX(tree, this.width), this.height - groundInset(tree.depth));
+    const offset = y => still ? 0 : crownOffset(tree, y);
     ctx.fillStyle = '#49635e';
     ctx.beginPath();
     ctx.moveTo(-.85, 0);
@@ -438,7 +542,9 @@ class SnowScene {
       const tip = top + drop;
       const shoulder = span * (.31 + .12 * Math.abs(z));
       const mid = top + drop * .58;
-      ctx.fillStyle = z < 0 ? '#194a49' : x < 0 ? '#368071' : '#28665f';
+      ctx.fillStyle = tree.depth < .32
+        ? (z < 0 ? '#406066' : x < 0 ? '#587e7c' : '#49716d')
+        : (z < 0 ? '#194a49' : x < 0 ? '#368071' : '#28665f');
       ctx.beginPath();
       const midX = x * .52 + offset(mid);
       ctx.moveTo(offset(top), top);
@@ -475,78 +581,85 @@ class SnowScene {
     ctx.restore();
   }
 
-  moveSmoke(dt, wind) {
-    this.smokeAge += dt;
-    if (this.smokeAge >= this.smokePeriod) {
-      this.smokeAge -= this.smokePeriod;
-      this.smokePeriod = between(112, 158);
+  moveSmoke(house, dt, wind) {
+    house.smokeAge += dt;
+    if (house.smokeAge >= house.smokePeriod) {
+      house.smokeAge -= house.smokePeriod;
+      house.smokePeriod = between(112, 158);
     }
-    const half = this.smokePeriod / 2;
-    const firing = smoothStep(this.smokeAge / 13) * smoothStep((half - this.smokeAge) / 15);
-    this.smokeCredit += dt * 11 * firing;
-    while (this.smokeCredit >= 1) {
-      this.smokeCredit--;
-      this.smoke.push({x: 0, y: 0, age: 0, life: between(2.2, 3.6), vx: wind * .22,
-        phase: between(0, 6.28), opacity: firing * between(.38, .64)});
+    const half = house.smokePeriod / 2;
+    const firing = smoothStep(house.smokeAge / 13) * smoothStep((half - house.smokeAge) / 15);
+    // A light breeze leaves room for buoyancy. Gusts carry the plume along faster.
+    const gust = smoothStep((Math.abs(wind) - 7) / 28);
+    const drift = wind * (.38 + .29 * gust);
+    // Emit a continuous plume. Puffs born together hold or disperse together at its tip.
+    house.smokeCredit += dt * (11 + .22 * Math.abs(drift)) * firing;
+    while (house.smokeCredit >= 1) {
+      house.smokeCredit--;
+      const pulse = Math.sin(12 * house.smokeAge + .9 * Math.sin(3.7 * house.smokeAge));
+      house.smoke.push({x: 0, y: 0, age: 0, life: between(2.2, 3.6), vx: drift * .7,
+        cohesion: smoothStep((pulse + .15) / .65), phase: between(0, 6.28), opacity: firing * between(.38, .64)});
     }
-    this.smoke = this.smoke.filter(puff => {
-      puff.age += dt;
+    house.smoke = house.smoke.filter(puff => {
+      // Gusts disperse the smoke sooner while carrying each puff at wind speed.
+      puff.age += dt * (1 + 1.60 * gust);
       if (puff.age >= puff.life) return false;
       const swirl = Math.sin(this.elapsed * 1.7 + puff.phase + puff.age);
-      puff.vx += (wind * .34 + 2.8 * swirl - puff.vx) * (1 - Math.exp(-dt * 2.3));
+      puff.vx += (drift + 2.8 * swirl - puff.vx) * (1 - Math.exp(-dt * 3));
       puff.x += puff.vx * dt;
       puff.y -= dt * (6.5 + swirl) / (1 + Math.abs(puff.vx) * .08);
       return true;
     });
   }
 
-  drawCottage() {
+  drawCottage(house) {
     const ctx = this.ctx;
-    const house = this.cottage;
+    const {style, eave, chimneyTop} = house;
     ctx.save();
-    ctx.translate(this.width * house.position, this.height - 2);
+    ctx.translate(this.width * house.position, this.height - groundInset(house.depth));
     ctx.scale(house.scale, house.scale);
     ctx.fillStyle = this.daylight > .5 ? '#4d6070' : '#c6cdd0';
-    for (const puff of this.smoke) {
+    for (const puff of house.smoke) {
       const age = puff.age / puff.life;
-      const stretch = Math.min(1, Math.abs(puff.vx) / 34);
-      const length = (.75 + age * 1.8) * (1 + stretch * 1.5);
-      const thickness = (.7 + age * 1.6) * (1 - .7 * stretch);
-      ctx.globalAlpha = puff.opacity * (1 - age) ** 1.3 * (1 - .35 * stretch);
+      const stretch = Math.min(1, Math.abs(puff.vx) / 32);
+      const tail = smoothStep((age - .32) / .26) * smoothStep((Math.abs(puff.vx) - 8) / 15);
+      const length = (.75 + age * 1.8) * (1 + 2.2 * Math.min(stretch, .60)) * (1 - .30 * tail);
+      const thickness = (.7 + age * 1.6) * (1 - .7 * Math.min(stretch, .40));
+      ctx.globalAlpha = puff.opacity * (1 - age) ** 1.3 * (1 - .35 * stretch) * (1 - tail * (1 - puff.cohesion));
       ctx.beginPath();
-      ctx.ellipse(5.1 + puff.x, -23 + puff.y, length, thickness,
-        -.28 * Math.sign(puff.vx), 0, Math.PI * 2);
+      ctx.ellipse(style.chimneyX + puff.x, chimneyTop + puff.y, length, thickness,
+        -.28 * (1 - stretch) * Math.sign(puff.vx), 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#885f46';
-    ctx.fillRect(-cottageHalfWidth, -12, 2 * cottageHalfWidth, 12);
+    ctx.fillStyle = style.wall;
+    ctx.fillRect(-style.half, -12, 2 * style.half, 12);
     ctx.fillStyle = '#573d34';
     ctx.fillRect(-1.4, -7, 2.8, 7);
-    ctx.fillRect(3.6, -23, 3, 10);
+    ctx.fillRect(style.chimneyX - 1.5, chimneyTop, 3, 11);
     ctx.fillStyle = '#876e66';
-    ctx.fillRect(3, -23.6, 4.2, 1.6);
+    ctx.fillRect(style.chimneyX - 2.1, chimneyTop - .6, 4.2, 1.6);
     ctx.fillStyle = '#493f42';
     ctx.beginPath();
-    ctx.moveTo(-11, -11); ctx.lineTo(0, -20); ctx.lineTo(11, -11);
+    ctx.moveTo(-eave, -11); ctx.lineTo(0, -style.ridge); ctx.lineTo(eave, -11);
     ctx.closePath(); ctx.fill();
     ctx.lineCap = 'round';
     for (let side = 0; side < 2; side++) {
       const sign = side ? 1 : -1;
       const snow = house.snow[side];
       ctx.beginPath();
-      ctx.moveTo(0, -20);
-      ctx.quadraticCurveTo(sign * 5.5, -15.5 - .6 * snow, sign * 10.6, -11.4);
+      ctx.moveTo(0, -style.ridge);
+      ctx.quadraticCurveTo(sign * eave / 2, -(style.ridge + 11) / 2 - .6 * snow, sign * (eave - .4), -11.4);
       ctx.strokeStyle = '#e5f2f7';
       ctx.lineWidth = .5 + snow * 2.6;
       ctx.stroke();
     }
-    for (const x of [-6.5, 3.1]) {
+    for (const x of [-style.half + 2, style.half - 5.4]) {
       ctx.fillStyle = '#6590a2';
       ctx.fillRect(x, -11.2, 3.5, 4.4);
       ctx.globalAlpha = 1 - this.daylight;
-      ctx.fillStyle = '#ffda85';
+      ctx.fillStyle = style.lamp;
       ctx.fillRect(x, -11.2, 3.5, 4.4);
       ctx.globalAlpha *= .14;
       ctx.fillRect(x - 1, -12.2, 5.5, 6.4);
@@ -554,17 +667,24 @@ class SnowScene {
       ctx.fillStyle = '#634938';
       ctx.fillRect(x + 1.5, -11.2, .5, 4.4);
     }
+    if (house.balconyRail) {
+      ctx.fillStyle = '#594237';
+      ctx.fillRect(-style.half, -6.4, 2 * style.half, .8);
+      for (let x = -style.half + 1; x < style.half; x += 3) ctx.fillRect(x, -6.4, .7, 2.8);
+      ctx.fillRect(-style.half - .5, -4, 2 * style.half + 1, 1);
+    }
     ctx.restore();
   }
 
   moveTrees(dt, center, strength, gust) {
     for (const tree of this.trees) {
-      const x = tree.position * this.width;
+      const x = treeX(tree, this.width);
       const wind = airGustAt(x, center, strength, gust);
       const target = (gust?.direction || 0) * wind * (.16 + .56 * wind);
       const frequency = 4.4 + (23 - tree.height) * .075;
       tree.velocity += (frequency * frequency * (target - tree.bend) - .92 * frequency * tree.velocity) * dt;
       tree.bend += tree.velocity * dt;
+      tree.trunkBend += (.5 * tree.bend - tree.trunkBend) * (1 - Math.exp(-dt / .65));
       if (wind < .55) continue;
       tree.release += (wind - .55) * dt * 16;
       while (tree.release >= 1) {
@@ -574,7 +694,7 @@ class SnowScene {
         const branch = loaded[Math.floor(Math.random() * loaded.length)];
         const along = between(.25, .35 + .65 * branch.snow);
         const y = branch.top + along * branch.drop;
-        const flake = this.flake(x + crownOffset(tree, y) + along * branch.x, this.height - 4 * snowHeightScale - 1 + y,
+        const flake = this.flake(x + crownOffset(tree, y) + along * branch.x, this.height - groundInset(tree.depth) - 1 + y,
           between(.7, 1.35), tree.depth + along * branch.z * branch.span / 40);
         flake.vx = gust.direction * between(38, 62);
         flake.vy = between(1, 4);
@@ -585,33 +705,36 @@ class SnowScene {
   }
 
   catchSnow(flake, oldY, oldX = flake.x) {
-    if (flake.vy <= 0 || flake.y < this.height - 28) return false;
-    const house = this.cottage;
-    const roofX = (flake.x - this.width * house.position) / house.scale;
-    if (Math.abs(roofX) <= 11 && Math.abs(flake.depth - .32) < .14) {
-      const side = Number(roofX > 0);
-      const roofY = this.height - 2 + house.scale * (-20 + Math.abs(roofX) * 9 / 11 - house.snow[side]);
-      if (oldY <= roofY && flake.y >= roofY) {
-        house.snow[side] = Math.min(1, house.snow[side] + .008 * flake.size);
-        return true;
-      }
-    }
+    if (flake.vy <= 0 || flake.y < this.height - 40) return false;
     const travel = flake.x - oldX;
-    if (travel && Math.abs(flake.depth - .32) < .14) {
-      const wallX = house.position * this.width - Math.sign(travel) * cottageHalfWidth * house.scale;
-      const crossing = (wallX - oldX) / travel;
-      if (crossing >= 0 && crossing <= 1) {
-        const hitY = oldY + crossing * (flake.y - oldY);
-        if (hitY >= this.height - 2 - 12 * house.scale && hitY <= this.height - 2) {
-          const bin = Math.max(0, Math.min(this.ground.length - 1, Math.round(wallX / this.width * (this.ground.length - 1))));
-          this.ground[bin] = Math.min(maxDriftDepth, this.ground[bin] + .006 * flake.size);
+    for (const house of this.houses) {
+      if (Math.abs(flake.depth - house.depth) >= .14) continue;
+      const base = this.height - groundInset(house.depth);
+      const roofX = (flake.x - this.width * house.position) / house.scale;
+      if (Math.abs(roofX) <= house.eave) {
+        const side = Number(roofX > 0);
+        const roofY = base + house.scale * (-house.style.ridge + Math.abs(roofX) * (house.style.ridge - 11) / house.eave - house.snow[side]);
+        if (oldY <= roofY && flake.y >= roofY) {
+          house.snow[side] = Math.min(1, house.snow[side] + .008 * flake.size);
           return true;
         }
       }
+      if (travel) {
+        const wallX = house.position * this.width - Math.sign(travel) * house.style.half * house.scale;
+        const crossing = (wallX - oldX) / travel;
+        if (crossing >= 0 && crossing <= 1) {
+          const hitY = oldY + crossing * (flake.y - oldY);
+          if (hitY >= base - 12 * house.scale && hitY <= base) {
+            const bin = Math.max(0, Math.min(this.ground.length - 1, Math.round(wallX / this.width * (this.ground.length - 1))));
+            this.ground[bin] = Math.min(maxDriftDepth, this.ground[bin] + .006 * flake.size);
+            return true;
+          }
+        }
+      }
     }
-    const base = this.height - 4 * snowHeightScale;
     for (const tree of this.trees) {
-      const dx = flake.x - this.width * tree.position - crownOffset(tree, flake.y - base);
+      const base = this.height - groundInset(tree.depth);
+      const dx = flake.x - treeX(tree, this.width) - crownOffset(tree, flake.y - base);
       if (Math.abs(dx) > tree.height * .42) continue;
       const dz = (flake.depth - tree.depth) * 40;
       for (const branch of tree.branches) {
@@ -672,39 +795,45 @@ class SnowScene {
     const step = gust.direction;
     const last = this.ground.length - 1;
     const spacing = this.width / last;
-    const house = this.cottage;
-    const houseX = house.position * this.width;
-    const halfWidth = cottageHalfWidth * house.scale;
-    const front = Math.max(0, Math.min(last, Math.round((houseX - step * halfWidth) / spacing)));
-    const back = Math.max(0, Math.min(last, Math.round((houseX + step * halfWidth) / spacing)));
+    const walls = this.houses.map(house => {
+      const x = house.position * this.width;
+      const half = house.style.half * house.scale;
+      const bin = offset => Math.max(0, Math.min(last, Math.round((x + step * offset) / spacing)));
+      return {x, half, scale: house.scale, front: bin(-half), back: bin(half), bin};
+    });
     // Work upwind so newly deposited snow stays in place for this frame.
     for (let n = 1; n <= last; n++) {
       const i = step > 0 ? last - n : n;
       const x = i * spacing;
-      const distance = (x - houseX) * step;
-      const nearHouse = 1 - smoothStep((Math.abs(distance) - halfWidth) / (34 * house.scale));
+      // Only the nearest wall shapes the local snowdrift.
+      let wall;
+      let gap = Infinity;
+      for (const candidate of walls) {
+        const distance = Math.abs(x - candidate.x) - candidate.half;
+        if (distance < gap) { gap = distance; wall = candidate; }
+      }
+      const distance = wall ? (x - wall.x) * step : 0;
+      const nearHouse = wall ? 1 - smoothStep(gap / (34 * wall.scale)) : 0;
       const wind = Math.max(gustAt(x, center, strength, gust), .38 * strength * nearHouse);
       if (wind < .01) continue;
-      const leeWall = distance - halfWidth;
       let shelter = 0;
       for (const tree of this.trees) {
-        const lee = (x - tree.position * this.width) * step / tree.height;
+        const lee = (x - treeX(tree, this.width)) * step / tree.height;
         if (lee > 0 && lee < 2.5) shelter = Math.max(shelter, Math.sin(Math.PI * lee / 2.5) ** 2);
       }
       const loose = Math.max(0, this.ground[i] - .45);
-      const scour = Math.exp(-(((distance + halfWidth + 7 * house.scale) / (5 * house.scale)) ** 2));
-      const inWake = (i - back) * step >= 0;
-      const exposure = inWake ? .018 + .982 * smoothStep((leeWall / house.scale - 10) / 24) : 1;
+      const scour = wall ? Math.exp(-(((distance + wall.half + 7 * wall.scale) / (5 * wall.scale)) ** 2)) : 0;
+      const inWake = wall && (i - wall.back) * step >= 0;
+      const exposure = inWake ? .018 + .982 * smoothStep(((distance - wall.half) / wall.scale - 10) / 24) : 1;
       const pickup = (1 - .92 * shelter) * exposure + 1.5 * scour;
       const amount = dt * 5 / spacing * wind * pickup * Math.min(2, loose);
-      if ((i - front) * step >= 0 && (back - i) * step > 0) continue;
-      if (i + step === front) {
+      if (wall && (i - wall.front) * step >= 0 && (wall.back - i) * step > 0) continue;
+      if (i + step === wall?.front) {
         // Part of the scoured snow stops at the windward wall. The rest
         // travels over the roof and settles across the sheltered wake.
-        this.transferGroundSnow(i, front, amount * .54);
+        this.transferGroundSnow(i, wall.front, amount * .54);
         for (const [offset, share] of [[3, .10], [9, .20], [16, .16]]) {
-          const landing = Math.max(0, Math.min(last,
-            Math.round((houseX + step * (halfWidth + offset * house.scale)) / spacing)));
+          const landing = wall.bin(wall.half + offset * wall.scale);
           this.transferGroundSnow(i, landing, amount * share);
         }
       } else {
@@ -828,12 +957,14 @@ class SnowScene {
     }
     if (strength) this.driftSnow(dt, gust, center, strength);
     this.moveTrees(dt, center, strength, gust);
-    const houseWind = (gust?.direction || 0) * airGustAt(this.cottage.position * this.width, center, strength, gust);
-    this.moveSmoke(dt, (1 - strength) * breeze + houseWind * windSpeed);
-    for (let side = 0; side < 2; side++) {
-      const exposure = Math.max(0, side ? -houseWind : houseWind);
-      const change = shower * .012 - (1 - shower) * .004 - exposure * .008;
-      this.cottage.snow[side] = Math.max(0, Math.min(1, this.cottage.snow[side] + dt * change));
+    for (const house of this.houses) {
+      const houseWind = (gust?.direction || 0) * airGustAt(house.position * this.width, center, strength, gust);
+      this.moveSmoke(house, dt, (1 - strength) * breeze + houseWind * windSpeed);
+      for (let side = 0; side < 2; side++) {
+        const exposure = Math.max(0, side ? -houseWind : houseWind);
+        const change = shower * .012 - (1 - shower) * .004 - exposure * .008;
+        house.snow[side] = Math.max(0, Math.min(1, house.snow[side] + dt * change));
+      }
     }
     this.ctx.clearRect(0, 0, this.width, this.height);
     const fadeStep = dt / 1.25;
@@ -869,19 +1000,32 @@ class SnowScene {
       }
       return true;
     });
-    // Draw back to front so a nearby flake can cross a tree's face.
     this.flakes.sort((a, b) => a.depth - b.depth);
+    this.drawLandscape(false);
+  }
+
+  drawLandscape(still) {
+    const ctx = this.ctx;
+    // A distant snowbank anchors the back row above the foreground drifts.
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, this.height);
+    for (let i = 0; i <= 32; i++) {
+      const x = i / 32;
+      ctx.lineTo(x * this.width, this.height - 7.4 - .6 * Math.sin(x * 11));
+    }
+    ctx.lineTo(this.width, this.height);
+    ctx.fillStyle = '#a9c5d2';
+    ctx.fill();
+    const flakes = still ? [] : this.flakes;
     let index = 0;
-    while (index < this.flakes.length && this.flakes[index].depth < .32) this.paintFlake(this.flakes[index++]);
-    this.drawCottage();
-    for (const tree of this.trees) {
-      while (index < this.flakes.length && this.flakes[index].depth < tree.depth) {
-        this.paintFlake(this.flakes[index++]);
-      }
-      this.drawTree(tree);
+    for (const item of this.scenery) {
+      while (index < flakes.length && flakes[index].depth < item.depth) this.paintFlake(flakes[index++]);
+      if (item.kind === 'house') this.drawCottage(item);
+      else this.drawTree(item, still);
     }
     this.drawGround();
-    while (index < this.flakes.length) this.paintFlake(this.flakes[index++]);
+    while (index < flakes.length) this.paintFlake(flakes[index++]);
   }
 }
 
@@ -894,7 +1038,7 @@ if (typeof document === 'undefined') {
   };
 } else if (!customElements.get('dashboard-christmas-snow')) {
   class DashboardChristmasSnow extends HTMLElement {
-    static observedAttributes = ['data-light-level'];
+    static observedAttributes = ['data-light-level', 'data-trees', 'data-houses'];
 
     constructor() {
       super();
@@ -956,6 +1100,7 @@ if (typeof document === 'undefined') {
       const value = Number.parseFloat(this.dataset.lightLevel);
       return {width: this.width, height: this.height, scale: Math.min(devicePixelRatio || 1, 2),
         visible: Boolean(this.isConnected && this.visible && !document.hidden),
+        treeCount: this.dataset.trees, houseCount: this.dataset.houses,
         reduced: this.motion.matches, level: Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null};
     }
 
